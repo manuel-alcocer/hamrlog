@@ -14,10 +14,11 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-#: Canonical unit suffixes. The operator may type any capitalisation, and any
-#: of them may be written with or without the "Hz" part.
+#: Canonical unit suffixes, spelled as the SI requires: M for mega, k for
+#: kilo (capital K is the kelvin) and Hz for hertz. The operator may type any
+#: capitalisation and may leave the "Hz" part out.
 UNIT_MHZ = "MHz"
-UNIT_KHZ = "KHz"
+UNIT_KHZ = "kHz"
 UNIT_HZ = "Hz"
 
 #: Unit -> how many hertz one of it is worth.
@@ -57,8 +58,8 @@ class UnitError(ValueError):
 def normalize_unit(text: str) -> str:
     """Turn what the operator typed into a canonical unit.
 
-    ``m``, ``M``, ``mhz``, ``MHZ`` all become ``MHz``; ``k`` and ``khz``
-    become ``KHz``; ``hz``, ``HZ`` and ``hZ`` become ``Hz``.
+    ``m``, ``M``, ``mhz``, ``MHZ`` all become ``MHz``; ``k``, ``K`` and
+    ``KHZ`` become ``kHz``; ``hz``, ``HZ`` and ``hZ`` become ``Hz``.
 
     Raises:
         UnitError: When the text is not a frequency unit.
@@ -66,7 +67,7 @@ def normalize_unit(text: str) -> str:
     match = _UNIT_RE.match(text.strip())
     if match is None:
         raise UnitError(
-            f"«{text.strip()}» no es una unidad de frecuencia. Usa M, K o Hz."
+            f"«{text.strip()}» no es una unidad de frecuencia. Usa M, k o Hz."
         )
 
     prefix = match.group("prefix").upper()
@@ -76,7 +77,7 @@ def normalize_unit(text: str) -> str:
         return UNIT_KHZ
     if match.group("hz"):
         return UNIT_HZ
-    raise UnitError("Falta la unidad. Usa M, K o Hz.")
+    raise UnitError("Falta la unidad. Usa M, k o Hz.")
 
 
 def describe_separator(separator: str) -> str:
@@ -132,8 +133,15 @@ class FrequencyFormat:
     thousands: str = ""
 
     def __post_init__(self) -> None:
-        if self.unit not in UNIT_SCALE:
-            raise UnitError(f"Unidad desconocida: «{self.unit}».")
+        # Normalised rather than compared, so any spelling is accepted here
+        # too. That also carries settings stored by an earlier version, which
+        # wrote kilohertz as "KHz".
+        try:
+            unit = normalize_unit(self.unit)
+        except UnitError as exc:
+            raise UnitError(f"Unidad desconocida: «{self.unit}».") from exc
+        object.__setattr__(self, "unit", unit)
+
         if self.decimal not in DECIMAL_SEPARATORS:
             raise UnitError(f"Separador decimal no válido: «{self.decimal}».")
         if self.thousands not in THOUSANDS_SEPARATORS:

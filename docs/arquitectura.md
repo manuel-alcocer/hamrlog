@@ -53,6 +53,11 @@ la pantalla, para que una API futura no pueda saltársela.
 **Los informes (RST) son texto.** Los modos digitales usan decibelios (`-12`),
 no la escala RST clásica.
 
+**Las unidades se guardan en la grafía del SI.** `MHz`, `kHz` y `Hz`, con la
+kilo en minúscula porque la `K` mayúscula es el kelvin. `FrequencyFormat`
+normaliza lo que reciba en lugar de rechazarlo, de modo que un ajuste escrito
+por una versión anterior, o a mano en la base de datos, se sigue entendiendo.
+
 **El formato de frecuencia es estado de módulo.** `core/units.py` guarda el
 formato activo y `bands.format_frequency` delega en él, de modo que cambiar la
 preferencia se refleja en toda la interfaz sin pasarla por parámetro a veinte

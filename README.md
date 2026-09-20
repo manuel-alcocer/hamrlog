@@ -376,16 +376,18 @@ Siempre se pide confirmación, indicando indicativo, fecha, banda y modo.
 ### Frecuencias y unidades
 
 Toda frecuencia lleva unidad. En **F5 → Unidades y formato** se elige la que se
-usa al mostrarlas y la que se supone al escribir un número sin unidad:
+usa al mostrarlas y la que se supone al escribir un número sin unidad. Se
+guardan con la grafía del Sistema Internacional (`MHz`, `kHz`, `Hz`), escribas
+como escribas:
 
 | Se escribe | Se guarda como |
 |---|---|
 | `M`, `m`, `mhz`, `MHZ`, `MHz` | `MHz` |
-| `K`, `k`, `khz`, `KHZ` | `KHz` |
+| `k`, `K`, `khz`, `KHZ` | `kHz` |
 | `hz`, `HZ`, `hZ`, `Hz` | `Hz` |
 
 La unidad escrita a mano manda sobre la configurada: con la preferencia en
-`MHz`, `7130 K` sigue siendo kilohercios.
+`MHz`, `7130 k` sigue siendo kilohercios.
 
 El **separador decimal** y el **de millar** también se configuran. Nunca pueden
 ser el mismo, y el de millar admite «ocultar»:
@@ -393,7 +395,7 @@ ser el mismo, y el de millar admite «ocultar»:
 | Unidad | Decimal | Millar | 7.130.000 Hz se ve |
 |---|---|---|---|
 | MHz | `.` | ocultar | `7.130 MHz` |
-| KHz | `.` | `,` | `7,130 KHz` |
+| kHz | `.` | `,` | `7,130 kHz` |
 | Hz | `,` | `.` | `7.130.000 Hz` |
 | Hz | `.` | espacio | `7 130 000 Hz` |
 
@@ -511,7 +513,7 @@ servicios. Consulta [docs/arquitectura.md](docs/arquitectura.md).
 
 ```bash
 pip install -e ".[dev,metrics,api]"
-pytest                  # 306 pruebas, incluidas las de la interfaz
+pytest                  # 308 pruebas, incluidas las de la interfaz
 ruff check src tests
 ```
 

@@ -48,7 +48,7 @@ def input_frequency(output_hz: int, shift_hz: int) -> int:
 def parse_shift(text: str) -> int | None:
     """Parse a repeater shift as the operator writes it on a radio.
 
-    Accepts ``-600``, ``-600 K``, ``-7.6 MHz``, ``+5 M`` and plain hertz, in
+    Accepts ``-600``, ``-600 k``, ``-7.6 MHz``, ``+5 M`` and plain hertz, in
     any capitalisation. A bare number is read as kilohertz whatever the
     display preference is: shifts are spoken in kilohertz, and reading "-600"
     as megahertz would be nonsense.
@@ -77,7 +77,7 @@ def parse_shift(text: str) -> int | None:
 
 
 def format_shift(shift_hz: int | None) -> str:
-    """Render a shift the way a radio displays it, e.g. '-600 KHz'.
+    """Render a shift the way a radio displays it, e.g. '-600 kHz'.
 
     Always in kilohertz below a megahertz and megahertz above, regardless of
     the display preference: that is how repeater shifts are written.

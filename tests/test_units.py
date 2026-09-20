@@ -13,7 +13,7 @@ from hamrlog.core.units import FrequencyFormat, UnitError
     ("text", "expected"),
     [
         ("m", "MHz"), ("M", "MHz"), ("mhz", "MHz"), ("MHZ", "MHz"), ("mHz", "MHz"),
-        ("k", "KHz"), ("K", "KHz"), ("khz", "KHz"), ("KHZ", "KHz"), ("kHz", "KHz"),
+        ("k", "kHz"), ("K", "kHz"), ("khz", "kHz"), ("KHZ", "kHz"), ("kHz", "kHz"),
         ("hz", "Hz"), ("HZ", "Hz"), ("hZ", "Hz"), ("Hz", "Hz"),
     ],
 )
@@ -65,9 +65,9 @@ def test_bad_separators_are_rejected(text):
     [
         ("MHz", ".", "", "7.130 MHz"),
         ("MHz", ",", ".", "7,130 MHz"),
-        ("KHz", ".", ",", "7,130 KHz"),
-        ("KHz", ",", ".", "7.130 KHz"),
-        ("KHz", ".", "", "7130 KHz"),
+        ("kHz", ".", ",", "7,130 kHz"),
+        ("kHz", ",", ".", "7.130 kHz"),
+        ("kHz", ".", "", "7130 kHz"),
         ("Hz", ".", ",", "7,130,000 Hz"),
         ("Hz", ",", ".", "7.130.000 Hz"),
         ("Hz", ".", " ", "7 130 000 Hz"),
@@ -98,13 +98,14 @@ def test_empty_frequency():
 
 def test_a_bare_number_uses_the_configured_unit():
     assert FrequencyFormat("MHz", ".", "").parse("7.130") == 7_130_000
-    assert FrequencyFormat("KHz", ".", "").parse("7130") == 7_130_000
+    assert FrequencyFormat("kHz", ".", "").parse("7130") == 7_130_000
     assert FrequencyFormat("Hz", ".", "").parse("7130000") == 7_130_000
 
 
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
+        ("7130 k", 7_130_000),
         ("7130 K", 7_130_000),
         ("7130k", 7_130_000),
         ("7130 khz", 7_130_000),
@@ -120,7 +121,7 @@ def test_a_written_unit_wins_over_the_configured_one(text, expected):
 
 
 def test_separators_are_read_as_configured():
-    european = FrequencyFormat("KHz", ",", ".")
+    european = FrequencyFormat("kHz", ",", ".")
     assert european.parse("7.130") == 7_130_000
     assert european.parse("7.130,5") == 7_130_500
 
@@ -158,18 +159,18 @@ def test_the_active_format_drives_the_whole_application():
 
 
 def test_band_ranges_follow_the_format():
-    units.set_active(FrequencyFormat("KHz", ".", ","))
+    units.set_active(FrequencyFormat("kHz", ".", ","))
     text = bands.get("40m").range_text
-    assert "7,000" in text and "7,200 KHz" in text
+    assert "7,000" in text and "7,200 kHz" in text
 
 
 def test_repeater_shifts_stay_in_kilohertz_by_default():
     """A shift of -600 must never be read as megahertz."""
     units.set_active(FrequencyFormat("MHz", ".", ""))
     assert repeaters.parse_shift("-600") == -600_000
-    assert repeaters.parse_shift("-600 K") == -600_000
+    assert repeaters.parse_shift("-600 k") == -600_000
     assert repeaters.parse_shift("-7.6 M") == -7_600_000
-    assert repeaters.format_shift(-600_000) == "-600 KHz"
+    assert repeaters.format_shift(-600_000) == "-600 kHz"
     assert repeaters.format_shift(-7_600_000) == "-7.600 MHz"
     assert repeaters.format_shift(0) == "simplex"
 
@@ -178,3 +179,29 @@ def test_adif_export_ignores_the_display_format():
     """The specification fixes megahertz with a dot; files must stay portable."""
     units.set_active(FrequencyFormat("Hz", ",", "."))
     assert bands.frequency_mhz(7_130_000) == "7.130000"
+
+
+def test_units_use_the_si_spelling():
+    """Kilo is a lower case k; capital K is the kelvin."""
+    assert units.UNIT_KHZ == "kHz"
+    assert units.UNIT_MHZ == "MHz"
+    assert units.UNIT_HZ == "Hz"
+    assert FrequencyFormat("kHz", ".", "").format(7_130_000) == "7130 kHz"
+
+
+@pytest.mark.parametrize("stored", ["KHz", "kHz", "k", "K", "khz", "KHZ"])
+def test_settings_written_in_any_spelling_still_work(stored):
+    """Including 'KHz', which an earlier version of this program wrote."""
+    chosen = FrequencyFormat(stored, ".", "")
+    assert chosen.unit == "kHz"
+    assert chosen.format(7_130_000) == "7130 kHz"
+
+
+def test_a_session_keeps_a_unit_stored_by_an_older_version():
+    from hamrlog.core.state import SessionState
+
+    state = SessionState(freq_unit="KHz")
+    assert state.frequency_format.unit == "kHz"
+
+    # A genuinely unusable value falls back rather than refusing to start.
+    assert SessionState(freq_unit="parsecs").frequency_format.unit == "MHz"

@@ -124,7 +124,7 @@ class RepeaterScreen(ModalScreen[int | None]):
                 subtitle=bands.frequency_help()
                 + "\nEl desplazamiento va en kilohercios si no pones unidad, y se "
                 "calcula solo a partir de la banda si lo dejas vacío "
-                "(-600 K en 2 m, -7.6 M en 70 cm).",
+                "(-600 k en 2 m, -7.6 M en 70 cm).",
                 save_label="Dar de alta",
             ),
             self._create,
@@ -282,7 +282,7 @@ def _repeater_fields(repeater=None) -> list[Field]:  # type: ignore[no-untyped-d
               placeholder=f"{units.active().example} — la que sintonizas"),
         Field("shift", "Desplazamiento",
               repeaters.format_shift(repeater.shift_hz) if repeater else "",
-              placeholder="-600 K, -7.6 M (vacío = el de la banda)"),
+              placeholder="-600 k, -7.6 M (vacío = el de la banda)"),
         Field("mode", "Modo", repeater.mode if repeater else "FM",
               placeholder="FM, C4FM, DMR, DSTAR"),
         Field("ctcss_tx", "Subtono CTCSS", repeater.ctcss_tx if repeater else "",

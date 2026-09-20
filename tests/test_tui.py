@@ -1267,8 +1267,8 @@ async def test_units_are_configurable_from_the_settings(operator):
         await pilot.press("ctrl+s")
         await pilot.pause()
 
-        # Lower case k is stored as K.
-        assert app.state.freq_unit == "KHz"
+        # Any spelling is stored in the SI form.
+        assert app.state.freq_unit == "kHz"
         assert app.state.decimal_separator == ","
         assert app.state.thousands_separator == "."
 
@@ -1301,11 +1301,11 @@ async def test_frequency_format_survives_a_restart(operator):
 
     app = HamrlogApp()
     async with app.run_test(size=(140, 30)) as pilot:
-        app.state.freq_unit = "KHz"
+        app.state.freq_unit = "kHz"
         app.state.thousands_separator = " "
         SettingsService.save_state(app.state)
         await pilot.pause()
 
     restored = SettingsService.load_state()
-    assert restored.freq_unit == "KHz"
-    assert restored.frequency_format.format(7_130_000) == "7 130 KHz"
+    assert restored.freq_unit == "kHz"
+    assert restored.frequency_format.format(7_130_000) == "7 130 kHz"

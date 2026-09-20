@@ -122,5 +122,5 @@ def frequency_help() -> str:
     current = units.active()
     return (
         f"Unidad por defecto {current.unit} (ejemplo: {current.example}). "
-        "Puedes escribir otra: M, K o Hz."
+        "Puedes escribir otra: M, k o Hz."
     )

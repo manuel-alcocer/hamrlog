@@ -106,16 +106,18 @@ ea7wm,victor,grid=IM76,tg=214,nota=por el repetidor
 ## Frecuencias y unidades
 
 Toda frecuencia lleva unidad. En **F5 → Unidades y formato** eliges la que se
-usa para mostrarlas y la que se supone cuando escribes un número sin unidad:
+usa para mostrarlas y la que se supone cuando escribes un número sin unidad.
+Se guardan con la grafía del Sistema Internacional, sea cual sea la que
+escribas:
 
 | Se escribe | Se guarda como |
 |---|---|
 | `M`, `m`, `mhz`, `MHZ`, `MHz` | `MHz` |
-| `K`, `k`, `khz`, `KHZ` | `KHz` |
+| `k`, `K`, `khz`, `KHZ` | `kHz` |
 | `hz`, `HZ`, `hZ`, `Hz` | `Hz` |
 
 La unidad que escribas a mano manda siempre sobre la configurada: con la
-preferencia en `MHz`, escribir `7130 K` sigue significando kilohercios.
+preferencia en `MHz`, escribir `7130 k` sigue significando kilohercios.
 
 También eliges el **separador decimal** y el **de millar**. No pueden ser el
 mismo, y el de millar admite «ocultar» para no agrupar las cifras:
@@ -123,7 +125,7 @@ mismo, y el de millar admite «ocultar» para no agrupar las cifras:
 | Unidad | Decimal | Millar | 7.130.000 Hz se ve |
 |---|---|---|---|
 | MHz | `.` | ocultar | `7.130 MHz` |
-| KHz | `.` | `,` | `7,130 KHz` |
+| kHz | `.` | `,` | `7,130 kHz` |
 | Hz | `,` | `.` | `7.130.000 Hz` |
 | Hz | `.` | espacio | `7 130 000 Hz` |
 

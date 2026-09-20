@@ -292,7 +292,7 @@ class ConfigScreen(ModalScreen[bool]):
     def _edit_units(self) -> None:
         current = self.state.frequency_format
         fields = [
-            Field("unit", "Unidad de frecuencia", current.unit, placeholder="M, K o Hz"),
+            Field("unit", "Unidad de frecuencia", current.unit, placeholder="M, k o Hz"),
             Field("decimal", "Separador decimal", current.decimal, placeholder=". o ,"),
             Field(
                 "thousands",
@@ -306,8 +306,9 @@ class ConfigScreen(ModalScreen[bool]):
                 "Unidades y formato",
                 fields,
                 subtitle="Se aplica a todas las frecuencias que veas y escribas. "
-                "La unidad puede escribirse como M, K o Hz, en mayúsculas o "
-                "minúsculas y con «Hz» o sin él.\n"
+                "La unidad puede escribirse como M, k o Hz, en mayúsculas o "
+                "minúsculas y con «Hz» o sin él; se guarda con la grafía del "
+                "Sistema Internacional (MHz, kHz, Hz).\n"
                 "El separador de millar y el decimal no pueden ser el mismo; "
                 "«ocultar» deja las cifras sin agrupar.\n"
                 "La exportación ADIF no se ve afectada: la norma fija megahercios "
