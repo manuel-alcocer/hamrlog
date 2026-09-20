@@ -22,9 +22,12 @@ build() {
 
 check() {
   cd "$pkgname-$pkgver"
-  # Skipped when pytest is absent, so the package builds on a minimal system.
-  if python -c 'import pytest' 2>/dev/null; then
+  # Needs the runtime dependencies as well as pytest, which are absent under
+  # makepkg --nodeps. Skipped rather than failed, so the package still builds.
+  if python -c 'import pytest, sqlalchemy, textual' 2>/dev/null; then
     PYTHONPATH=src python -m pytest -q
+  else
+    echo "==> Dependencias de prueba ausentes, se omite la comprobación"
   fi
 }
 
