@@ -495,16 +495,17 @@ que ve el usuario, en español.
 
 ## Publicar una versión
 
-Las releases se construyen solas. Etiquetar y empujar dispara el flujo que
-compila el ejecutable de Linux, el de Windows y el instalador, comprueba que
-las pruebas pasan y que cada binario arranca, y publica todo con sus sumas
-SHA-256:
+Las releases se construyen solas: etiquetar y empujar compila el ejecutable de
+Linux, el de Windows y el instalador, comprueba que las pruebas pasan y que
+cada binario arranca, y lo publica todo con sus sumas SHA-256.
 
 ```bash
 # Sube la versión en pyproject.toml y en packaging/arch/PKGBUILD
 git tag -a v0.2.0 -m "v0.2.0"
 git push origin v0.2.0
 ```
+
+Los detalles están en [packaging/README.md](packaging/README.md).
 
 ## Licencia
 

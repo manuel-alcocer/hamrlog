@@ -103,7 +103,11 @@ async def test_form_arrows_edit_text_but_select_buttons_once_focused():
     app = Harness()
     async with app.run_test() as pilot:
         app.push_screen(FormScreen("Prueba", [Field("name", "Nombre", "abc")]))
-        await pilot.pause()
+        # Children are mounted on a later refresh than the screen itself.
+        for _ in range(60):
+            if app.screen.query("#field-name"):
+                break
+            await pilot.pause()
 
         field = app.screen.query_one("#field-name")
         assert app.focused is field

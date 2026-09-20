@@ -44,6 +44,21 @@ def entry_value(app, field: str = "call") -> str:
     return app.query_one(EntryPanel).values().get(field, "")
 
 
+async def wait_for(pilot, app, selector: str, tries: int = 60):
+    """Wait until a widget exists, then return it.
+
+    A screen is current as soon as it is pushed, but its children are mounted
+    on a later refresh. A single pause is enough on a fast machine and not on
+    a slow one, which made these tests flaky on the Windows runners.
+    """
+    for _ in range(tries):
+        found = app.screen.query(selector)
+        if found:
+            return found.first()
+        await pilot.pause()
+    raise AssertionError(f"{selector} no apareció en {app.screen}")
+
+
 async def test_logging_from_the_entry_line(operator, station):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
@@ -138,14 +153,14 @@ async def test_digital_mode_is_in_the_single_mode_selector(operator):
     async with app.run_test(size=(120, 30)) as pilot:
         await pilot.press("f4")
         await pilot.pause()
-        app.screen.query_one("#filter").value = "DMR"
+        (await wait_for(pilot, app, "#filter")).value = "DMR"
         await pilot.pause()
         await pilot.press("enter")
         await pilot.pause()
 
         # The mode is applied and its extra fields are requested.
         assert app.state.mode == "DMR"
-        app.screen.query_one("#field-talkgroup").value = "21466"
+        (await wait_for(pilot, app, "#field-talkgroup")).value = "21466"
         await pilot.press("ctrl+s")
         await pilot.pause()
 
@@ -164,7 +179,7 @@ async def test_profile_saves_and_reloads_the_configuration(operator, station):
         await pilot.pause()
         await pilot.press("g")
         await pilot.pause()
-        app.screen.query_one("#field-name").value = "CW-20m"
+        (await wait_for(pilot, app, "#field-name")).value = "CW-20m"
         await pilot.press("ctrl+s")
         await pilot.pause()
         assert app.state.profile_name == "CW-20m"
@@ -208,7 +223,7 @@ async def test_log_screen_lists_the_qsos(operator):
         assert isinstance(app.screen, LogScreen)
         assert app.screen.query_one("#log-table").row_count == 2
 
-        app.screen.query_one("#search").value = "ea1"
+        (await wait_for(pilot, app, "#search")).value = "ea1"
         await pilot.pause()
         assert app.screen.query_one("#log-table").row_count == 1
 
@@ -219,7 +234,7 @@ async def test_first_run_asks_for_a_callsign(tmp_path):
     async with app.run_test(size=(120, 30)) as pilot:
         await pilot.pause()
         assert app.state.operator_id is None
-        app.screen.query_one("#field-callsign").value = "EA7WM"
+        (await wait_for(pilot, app, "#field-callsign")).value = "EA7WM"
         await pilot.press("ctrl+s")
         await pilot.pause()
 
@@ -487,7 +502,7 @@ async def test_address_book_search_filters_the_table(operator):
 
         table = app.screen.query_one("#book-table")
         assert table.row_count == 3
-        app.screen.query_one("#book-search").value = "bilbao"
+        (await wait_for(pilot, app, "#book-search")).value = "bilbao"
         await pilot.pause()
         assert table.row_count == 1
 
@@ -540,7 +555,7 @@ async def test_address_book_import_from_the_interface(operator, tmp_path):
         await pilot.press("ctrl+i")
         await pilot.pause()
 
-        app.screen.query_one("#field-path").value = str(path)
+        (await wait_for(pilot, app, "#field-path")).value = str(path)
         await pilot.press("ctrl+s")
         await pilot.pause()
         # The import runs in a worker thread.
@@ -662,7 +677,7 @@ async def test_mode_selector_holds_analogue_and_digital_modes(operator):
         assert options.option_count > 20
 
         # Filtering by the group name narrows it to the digital ones.
-        app.screen.query_one("#filter").value = "voz digital"
+        (await wait_for(pilot, app, "#filter")).value = "voz digital"
         await pilot.pause()
         assert 0 < app.screen.query_one("#choices").option_count < 10
 
