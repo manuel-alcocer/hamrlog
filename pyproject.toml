@@ -1,0 +1,65 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "hamrlog"
+version = "0.1.0"
+description = "Cross-platform terminal logbook for amateur radio operators"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Manuel Alcocer", email = "manuel@alcocer.net" }]
+keywords = ["ham radio", "amateur radio", "logbook", "adif", "tui"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Natural Language :: Spanish",
+    "Operating System :: OS Independent",
+    "Operating System :: Microsoft :: Windows",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Ham Radio",
+]
+
+[project.urls]
+Homepage = "https://github.com/manuel-alcocer/hamrlog"
+Repository = "https://github.com/manuel-alcocer/hamrlog"
+Issues = "https://github.com/manuel-alcocer/hamrlog/issues"
+
+dependencies = [
+    "textual>=1.0",
+    "sqlalchemy>=2.0",
+]
+
+[project.optional-dependencies]
+# Prometheus exporter. Enabled at runtime only when installed.
+metrics = ["prometheus-client>=0.20"]
+# Future REST API / web frontend. Not imported by the TUI.
+api = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.0"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
+
+[project.scripts]
+hamrlog = "hamrlog.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/hamrlog"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"

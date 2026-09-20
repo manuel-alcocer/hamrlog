@@ -1,0 +1,23 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+dist/
+build/
+.pytest_cache/
+.ruff_cache/
+*.sqlite3
+*.db
+.coverage
+
+# PyInstaller
+*.manifest
+!packaging/pyinstaller/*.spec
+
+# Entornos de uv
+.uv/
+
+# Listas de contactos descargadas: datos personales de terceros, no código
+contacts/
+*.adi

@@ -1,0 +1,165 @@
+name: Release
+
+# Builds the self-contained executables and publishes them. Windows binaries
+# cannot be cross-compiled from Linux, which is why this runs on both.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Versión a construir (por ejemplo 0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  binaries:
+    name: Ejecutable para ${{ matrix.label }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            label: Linux
+            artifact: hamrlog-linux-x86_64
+            binary: dist/hamrlog
+          - os: windows-latest
+            label: Windows
+            artifact: hamrlog-windows-x86_64
+            binary: dist/hamrlog.exe
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar el proyecto y PyInstaller
+        run: |
+          uv sync --extra dev
+          uv pip install pyinstaller
+
+      - name: Comprobar que las pruebas pasan antes de publicar
+        run: uv run pytest -q
+
+      - name: Construir el ejecutable
+        run: uv run pyinstaller --clean --noconfirm packaging/pyinstaller/hamrlog.spec
+
+      - name: Comprobar que el ejecutable arranca
+        shell: bash
+        run: |
+          "${{ matrix.binary }}" --version
+          "${{ matrix.binary }}" info
+
+      - name: Renombrar para la release
+        shell: bash
+        run: |
+          mkdir -p artifacts
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            cp "${{ matrix.binary }}" "artifacts/${{ matrix.artifact }}.exe"
+          else
+            cp "${{ matrix.binary }}" "artifacts/${{ matrix.artifact }}"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: artifacts/*
+
+  windows-installer:
+    name: Instalador de Windows
+    needs: binaries
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: hamrlog-windows-x86_64
+          path: incoming
+
+      - name: Preparar el ejecutable donde lo espera Inno Setup
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp incoming/hamrlog-windows-x86_64.exe dist/hamrlog.exe
+
+      - name: Deducir la versión
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compilar el instalador
+        run: |
+          iscc /DHamrlogVersion=${{ steps.version.outputs.value }} packaging\windows\hamrlog.iss
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hamrlog-windows-setup
+          path: dist/hamrlog-*-setup.exe
+
+  python-package:
+    name: Paquete de Python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - run: uv build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/*
+
+  publish:
+    name: Publicar la release
+    needs: [binaries, windows-installer, python-package]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Reunir los ficheros y sus sumas
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          cd release && sha256sum * > SHA256SUMS.txt
+          ls -lh
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
+          body: |
+            ## Instalación
+
+            **Windows**: descarga `hamrlog-*-setup.exe` y ejecútalo. No hace
+            falta tener Python. Si prefieres el ejecutable suelto, usa
+            `hamrlog-windows-x86_64.exe`.
+
+            **Linux**: descarga `hamrlog-linux-x86_64`, dale permisos y
+            ejecútalo:
+
+            ```bash
+            chmod +x hamrlog-linux-x86_64
+            ./hamrlog-linux-x86_64
+            ```
+
+            **Con Python ya instalado**: `pipx install hamrlog` desde el
+            `.whl`, o el `install.sh` del repositorio.
+
+            **Arch Linux**: `packaging/arch/PKGBUILD`.
+
+            Comprueba las descargas con `SHA256SUMS.txt`.

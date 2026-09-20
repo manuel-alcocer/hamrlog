@@ -1,0 +1,37 @@
+# Maintainer: Manuel Alcocer <manuel@alcocer.net>
+pkgname=hamrlog
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Diario de contactos para radioaficionados, en modo texto"
+arch=('any')
+url="https://github.com/manuel-alcocer/hamrlog"
+license=('MIT')
+depends=('python' 'python-textual' 'python-sqlalchemy')
+makedepends=('python-build' 'python-installer' 'python-hatchling' 'python-wheel')
+optdepends=(
+  'python-prometheus_client: exportador de métricas Prometheus'
+  'python-fastapi: API REST de solo lectura'
+)
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+build() {
+  cd "$pkgname-$pkgver"
+  python -m build --wheel --no-isolation
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  # Skipped when pytest is absent, so the package builds on a minimal system.
+  if python -c 'import pytest' 2>/dev/null; then
+    PYTHONPATH=src python -m pytest -q
+  fi
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+  install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+  install -Dm644 docs/arquitectura.md "$pkgdir/usr/share/doc/$pkgname/arquitectura.md"
+}

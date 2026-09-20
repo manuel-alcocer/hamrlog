@@ -1,0 +1,293 @@
+/* hamrlog layout.
+   Vertical stack: menu, status, history (flexible), entry, counters.
+   The history panel is the only widget that grows, so the entry line always
+   stays at the same place on screen no matter the terminal size. */
+
+Screen {
+    layout: vertical;
+    background: $surface;
+}
+
+#menubar {
+    height: 1;
+    background: $panel;
+    color: $text;
+    padding: 0 1;
+}
+
+/* Exactly one row: a border here would consume the only line available,
+   so the separation from the history panel is done with background colour. */
+#statusline {
+    height: 1;
+    background: $primary-darken-3;
+    color: $text;
+    padding: 0 1;
+}
+
+/* The log and its detail share one framed area, so it reads as a single
+   panel with two halves rather than two unrelated widgets. */
+#log-frame {
+    height: 1fr;
+    min-height: 8;
+    border: round $primary-darken-2;
+    border-title-color: $accent;
+    border-title-align: left;
+    padding: 0;
+}
+
+#history {
+    height: 1fr;
+    min-height: 3;
+    border: none;
+    background: $surface;
+}
+
+/* Fixed height: three lines of detail plus the rule above them. Padding
+   only on the sides, or the third line would fall outside. */
+#detail {
+    height: 4;
+    padding: 0 1;
+    border-top: solid $primary-darken-2;
+    background: $surface;
+}
+
+#history > .datatable--header {
+    background: $panel;
+    color: $text;
+    text-style: bold;
+}
+
+/* The history never holds focus, so its cursor must stay clearly visible
+   anyway: it is what the arrow keys move from the entry line. */
+#history > .datatable--cursor,
+#history > .datatable--hover {
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+#entry {
+    height: auto;
+    border-top: solid $primary-darken-2;
+    background: $boost;
+    padding: 0;
+}
+
+/* One row of boxes, each labelled. The free-text field takes what is left,
+   so the form fills the width without wrapping. */
+#entry-fields {
+    height: 1;
+    width: 100%;
+}
+
+.entry-label {
+    height: 1;
+    padding: 0 1 0 1;
+    color: $text-muted;
+    text-style: bold;
+}
+
+.entry-field {
+    border: none;
+    height: 1;
+    padding: 0 1;
+    background: $boost;
+}
+
+.entry-field:focus {
+    background: $primary-darken-2;
+    text-style: bold;
+}
+
+/* Browsing the log: the form is replaced by a bar of actions, which has to
+   look unmistakably different from a field waiting for a callsign. */
+#entry-browse {
+    height: 1;
+    background: $warning-darken-3;
+    color: $text;
+}
+
+#entry-hint,
+#entry-feedback {
+    height: 1;
+    padding: 0 1;
+}
+
+#stats {
+    height: 1;
+    background: $panel;
+    padding: 0 1;
+}
+
+/* ----------------------------------------------------------- modals ---- */
+
+.modal {
+    width: 84;
+    max-width: 96%;
+    height: auto;
+    max-height: 90%;
+    padding: 1 2;
+    background: $surface;
+    border: thick $primary;
+    align: center middle;
+}
+
+.modal-small {
+    width: 64;
+}
+
+.modal-wide {
+    width: 96%;
+    height: 90%;
+}
+
+/* Repeater rows carry frequency, shift, tone and mode, so they need room. */
+.modal-wide-list {
+    width: 100;
+    max-width: 96%;
+}
+
+.modal-form {
+    width: 72;
+}
+
+ModalScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+.modal-title {
+    width: 100%;
+    text-style: bold;
+    color: $accent;
+    padding-bottom: 1;
+}
+
+.modal-subtitle {
+    width: 100%;
+    color: $text-muted;
+    padding-bottom: 1;
+}
+
+.modal-help {
+    width: 100%;
+    color: $text-muted;
+    text-style: italic;
+    padding-top: 1;
+}
+
+.modal-legend {
+    width: 100%;
+    color: $text-muted;
+}
+
+.modal-preview {
+    width: 100%;
+    height: auto;
+    min-height: 1;
+    padding: 1 0 0 0;
+}
+
+.modal-buttons {
+    height: auto;
+    width: 100%;
+    align-horizontal: right;
+    padding-top: 1;
+}
+
+.modal-buttons Button {
+    margin-left: 2;
+}
+
+.modal OptionList {
+    height: auto;
+    max-height: 20;
+    border: round $primary-darken-2;
+    background: $surface;
+}
+
+.modal-wide OptionList {
+    max-height: 1fr;
+}
+
+/* ------------------------------------------------------------ forms ---- */
+
+.form-body {
+    height: auto;
+    max-height: 24;
+}
+
+.form-row {
+    height: 3;
+    width: 100%;
+}
+
+.form-label {
+    width: 22;
+    padding: 1 1 0 0;
+    color: $text-muted;
+}
+
+.form-input {
+    width: 1fr;
+}
+
+.form-readonly {
+    padding: 1 1;
+    color: $text-muted;
+    border: round $panel;
+}
+
+.form-error {
+    width: 100%;
+    height: auto;
+    color: $error;
+}
+
+/* --------------------------------------------------------- contacts ---- */
+
+.search-row {
+    height: 3;
+    width: 100%;
+}
+
+.search-row Input {
+    width: 1fr;
+}
+
+.search-count {
+    width: 18;
+    padding: 1 1;
+    color: $text-muted;
+    text-align: right;
+}
+
+#contacts-table {
+    height: 1fr;
+    min-height: 10;
+}
+
+.help-body {
+    height: 1fr;
+    padding: 0 1;
+}
+
+/* ----------------------------------------------------- address book ---- */
+
+#tabs {
+    height: 1fr;
+}
+
+#tabs TabPane {
+    padding: 0;
+}
+
+#book-table {
+    height: 1fr;
+    min-height: 8;
+}
+
+#book-result {
+    height: auto;
+    max-height: 4;
+}

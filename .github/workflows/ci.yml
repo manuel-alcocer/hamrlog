@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Pruebas (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        # The whole point of the project is running the same on both, so both
+        # are tested on every push.
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.10", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Instalar Python ${{ matrix.python }}
+        run: uv python install ${{ matrix.python }}
+
+      - name: Instalar el proyecto
+        run: uv sync --python ${{ matrix.python }} --extra dev --extra metrics
+
+      - name: Linter
+        run: uv run ruff check src tests
+
+      - name: Pruebas
+        run: uv run pytest -q
+
+  build-check:
+    name: El paquete se construye e instala
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Construir
+        run: uv build
+
+      - name: Instalar el wheel en un entorno limpio y probarlo
+        run: |
+          uv venv /tmp/clean
+          uv pip install --python /tmp/clean/bin/python dist/*.whl
+          /tmp/clean/bin/hamrlog --version
+          /tmp/clean/bin/hamrlog info
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-package
+          path: dist/*
