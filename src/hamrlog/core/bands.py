@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from . import units
+
 KHZ = 1_000
 MHZ = 1_000_000
 
@@ -33,6 +35,13 @@ class Band:
 
     def contains(self, freq_hz: int) -> bool:
         return self.low_hz <= freq_hz <= self.high_hz
+
+    @property
+    def range_text(self) -> str:
+        """Edges rendered in the operator's chosen unit and separators."""
+        low = units.active().format(self.low_hz, with_unit=False)
+        high = units.active().format(self.high_hz)
+        return f"{self.label} · {low} - {high}"
 
 
 # Ordered from lowest to highest frequency; the order drives the selector list.
@@ -78,13 +87,13 @@ def from_frequency(freq_hz: int) -> Band | None:
     return None
 
 
-def format_frequency(freq_hz: int | None) -> str:
-    """Render hertz as MHz with kHz resolution, e.g. 7130000 -> '7.130.000'."""
-    if not freq_hz:
-        return "-"
-    mhz, remainder = divmod(freq_hz, MHZ)
-    khz, hz = divmod(remainder, KHZ)
-    return f"{mhz}.{khz:03d}.{hz:03d}"
+def format_frequency(freq_hz: int | None, *, with_unit: bool = True) -> str:
+    """Render hertz the way the operator has asked to see frequencies.
+
+    Delegates to the active format, so unit and separators are decided once
+    in the settings rather than in each widget.
+    """
+    return units.active().format(freq_hz, with_unit=with_unit)
 
 
 def frequency_mhz(freq_hz: int | None) -> str:
@@ -99,45 +108,19 @@ def frequency_mhz(freq_hz: int | None) -> str:
 
 
 def parse_frequency(text: str) -> int | None:
-    """Parse a user supplied frequency into hertz.
+    """Parse a frequency the operator typed, in hertz.
 
-    Accepts the shapes an operator actually types: ``14.250`` and ``14,250``
-    (MHz), ``7130`` (kHz), ``145500000`` (Hz), and explicit units such as
-    ``433.500 MHz`` or ``7130 kHz``. Grouping dots like ``7.130.000`` are also
-    understood because the status bar renders frequencies that way.
+    A unit written by hand wins; without one, the configured default applies.
+    Guessing the unit from the magnitude, as this used to do, made the same
+    text mean different things depending on the number.
     """
-    raw = text.strip().lower().replace(" ", "")
-    if not raw:
-        return None
+    return units.active().parse(text)
 
-    unit = None
-    for suffix, scale in (("ghz", 1_000 * MHZ), ("mhz", MHZ), ("khz", KHZ), ("hz", 1)):
-        if raw.endswith(suffix):
-            unit = scale
-            raw = raw[: -len(suffix)]
-            break
 
-    # Two or more separators means digit grouping (7.130.000), not a decimal point.
-    if raw.count(".") + raw.count(",") >= 2:
-        raw = raw.replace(".", "").replace(",", "")
-        unit = unit or 1
-    else:
-        raw = raw.replace(",", ".")
-
-    try:
-        value = float(raw)
-    except ValueError:
-        return None
-
-    if unit is None:
-        # No explicit unit: guess from magnitude the way logging software does.
-        if "." in raw:
-            unit = MHZ
-        elif value >= 1_000_000:
-            unit = 1
-        elif value >= 1_000:
-            unit = KHZ
-        else:
-            unit = MHZ
-
-    return int(round(value * unit))
+def frequency_help() -> str:
+    """One line telling the operator what shape a frequency should have."""
+    current = units.active()
+    return (
+        f"Unidad por defecto {current.unit} (ejemplo: {current.example}). "
+        "Puedes escribir otra: M, K o Hz."
+    )

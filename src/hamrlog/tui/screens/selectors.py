@@ -9,14 +9,15 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
-from ...core import bands, modes
+from ...core import bands, modes, units
 from .base import Choice, SelectionScreen
 
 
 def band_screen(current: str) -> SelectionScreen:
     """F2: pick a band. Returns the ADIF band name."""
     choices = [
-        Choice(value=band.name, label=f"{band.name:<7}", detail=band.label) for band in bands.BANDS
+        Choice(value=band.name, label=f"{band.name:<7}", detail=band.range_text)
+        for band in bands.BANDS
     ]
     return SelectionScreen(
         "F2 · Selector de banda",
@@ -86,14 +87,18 @@ class FrequencyScreen(ModalScreen[int | None]):
         self.current_hz = current_hz
 
     def compose(self) -> ComposeResult:
-        initial = bands.format_frequency(self.current_hz) if self.current_hz else ""
+        current = units.active()
+        initial = (
+            current.format(self.current_hz, with_unit=False) if self.current_hz else ""
+        )
         with Vertical(classes="modal modal-small"):
             yield Label("F3 · Frecuencia", classes="modal-title")
-            yield Static(
-                "Escribe en MHz (14.250), kHz (7130) o con unidad (433.500 MHz).",
-                classes="modal-subtitle",
+            yield Static(bands.frequency_help(), classes="modal-subtitle")
+            yield Input(
+                value=initial,
+                placeholder=current.format(14_250_000, with_unit=False),
+                id="freq",
             )
-            yield Input(value=initial, placeholder="14.250", id="freq")
             yield Static("", id="freq-preview", classes="modal-preview")
             with Horizontal(classes="modal-buttons"):
                 yield Button("Aceptar (Enter)", variant="primary", id="save")
@@ -112,16 +117,16 @@ class FrequencyScreen(ModalScreen[int | None]):
         preview = self.query_one("#freq-preview", Static)
         freq_hz = bands.parse_frequency(text)
         if freq_hz is None:
-            preview.update("[dim]Introduce una frecuencia[/dim]")
+            preview.update(f"[dim]{bands.frequency_help()}[/dim]")
             return
         band = bands.from_frequency(freq_hz)
         rendered = bands.format_frequency(freq_hz)
         if band is None:
             preview.update(
-                f"[yellow]{rendered} Hz — fuera de las bandas de radioaficionado[/yellow]"
+                f"[yellow]{rendered} — fuera de las bandas de radioaficionado[/yellow]"
             )
         else:
-            preview.update(f"[green]{rendered} Hz[/green] → banda [bold]{band.name}[/bold]")
+            preview.update(f"[green]{rendered}[/green] → banda [bold]{band.name}[/bold]")
 
     @on(Input.Submitted, "#freq")
     @on(Button.Pressed, "#save")
@@ -129,7 +134,7 @@ class FrequencyScreen(ModalScreen[int | None]):
         freq_hz = bands.parse_frequency(self.query_one("#freq", Input).value)
         if freq_hz is None:
             self.query_one("#freq-preview", Static).update(
-                "[red]No se reconoce esa frecuencia[/red]"
+                f"[red]No se reconoce esa frecuencia.[/red] [dim]{bands.frequency_help()}[/dim]"
             )
             return
         self.dismiss(freq_hz)

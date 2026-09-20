@@ -12,6 +12,7 @@ hamrlog/
 │   ├── bands.py        Plan de bandas IARU y análisis de frecuencias
 │   ├── modes.py        Modos y su equivalencia ADIF (MODE/SUBMODE)
 │   ├── callsign.py     Normalización de indicativos y prefijos DXCC
+│   ├── units.py        Unidades de frecuencia y separadores numéricos
 │   ├── repeaters.py    Desplazamientos por banda y tonos CTCSS
 │   ├── contacts.py     Formatos de listín: RadioID, BrandMeister, CPS, JSON
 │   ├── entry.py        Analizador de la línea de entrada rápida
@@ -51,6 +52,17 @@ la pantalla, para que una API futura no pueda saltársela.
 
 **Los informes (RST) son texto.** Los modos digitales usan decibelios (`-12`),
 no la escala RST clásica.
+
+**El formato de frecuencia es estado de módulo.** `core/units.py` guarda el
+formato activo y `bands.format_frequency` delega en él, de modo que cambiar la
+preferencia se refleja en toda la interfaz sin pasarla por parámetro a veinte
+widgets. Es estado global, admitido porque es presentación y no datos: lo que
+se almacena son hercios enteros, siempre.
+
+**Ya no se adivina la unidad por la magnitud.** Antes `7130` se leía como
+kilohercios y `14.250` como megahercios según su tamaño, así que el mismo texto
+significaba cosas distintas según el número. Ahora un número sin unidad usa la
+configurada, y la unidad escrita a mano manda sobre ella.
 
 **Dos frecuencias por contacto.** `freq_hz` es la que el operador sintoniza, que
 por repetidor es la de salida; `freq_tx_hz` es la de transmisión cuando difiere,

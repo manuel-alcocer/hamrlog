@@ -103,6 +103,35 @@ También puedes asignar un campo por nombre en cualquier posición:
 ea7wm,victor,grid=IM76,tg=214,nota=por el repetidor
 ```
 
+## Frecuencias y unidades
+
+Toda frecuencia lleva unidad. En **F5 → Unidades y formato** eliges la que se
+usa para mostrarlas y la que se supone cuando escribes un número sin unidad:
+
+| Se escribe | Se guarda como |
+|---|---|
+| `M`, `m`, `mhz`, `MHZ`, `MHz` | `MHz` |
+| `K`, `k`, `khz`, `KHZ` | `KHz` |
+| `hz`, `HZ`, `hZ`, `Hz` | `Hz` |
+
+La unidad que escribas a mano manda siempre sobre la configurada: con la
+preferencia en `MHz`, escribir `7130 K` sigue significando kilohercios.
+
+También eliges el **separador decimal** y el **de millar**. No pueden ser el
+mismo, y el de millar admite «ocultar» para no agrupar las cifras:
+
+| Unidad | Decimal | Millar | 7.130.000 Hz se ve |
+|---|---|---|---|
+| MHz | `.` | ocultar | `7.130 MHz` |
+| KHz | `.` | `,` | `7,130 KHz` |
+| Hz | `,` | `.` | `7.130.000 Hz` |
+| Hz | `.` | espacio | `7 130 000 Hz` |
+
+Los desplazamientos de repetidor son la excepción: un `-600` sin unidad son
+siempre kilohercios, porque así se hablan. La exportación ADIF tampoco se ve
+afectada: la norma fija megahercios con punto, y el fichero tiene que poder
+leerlo otro programa.
+
 ## Indicativos mal escritos
 
 Al teclear, el indicativo se comprueba contra la forma que tiene un indicativo

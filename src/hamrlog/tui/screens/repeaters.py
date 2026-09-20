@@ -15,7 +15,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList, Static
 from textual.widgets.option_list import Option
 
-from ...core import bands, modes, repeaters
+from ...core import bands, modes, repeaters, units
 from ...core.services import RepeaterService, ServiceError
 from ...core.state import SessionState
 from .base import ConfirmScreen, Field, FormScreen
@@ -121,8 +121,10 @@ class RepeaterScreen(ModalScreen[int | None]):
             FormScreen(
                 "Nuevo repetidor",
                 _repeater_fields(),
-                subtitle="El desplazamiento se calcula solo a partir de la banda "
-                "si lo dejas vacío (-600 kHz en 2 m, -7,6 MHz en 70 cm).",
+                subtitle=bands.frequency_help()
+                + "\nEl desplazamiento va en kilohercios si no pones unidad, y se "
+                "calcula solo a partir de la banda si lo dejas vacío "
+                "(-600 K en 2 m, -7.6 M en 70 cm).",
                 save_label="Dar de alta",
             ),
             self._create,
@@ -275,11 +277,12 @@ def _repeater_fields(repeater=None) -> list[Field]:  # type: ignore[no-untyped-d
         Field("name", "Nombre / ubicación", repeater.name if repeater else "",
               placeholder="Sevilla - Cerro del Águila"),
         Field("output_hz", "Frecuencia de salida",
-              bands.format_frequency(repeater.output_hz) if repeater else "",
-              placeholder="145.600 (la que sintonizas)"),
+              bands.format_frequency(repeater.output_hz, with_unit=False)
+              if repeater else "",
+              placeholder=f"{units.active().example} — la que sintonizas"),
         Field("shift", "Desplazamiento",
               repeaters.format_shift(repeater.shift_hz) if repeater else "",
-              placeholder="-600 kHz (vacío = el de la banda)"),
+              placeholder="-600 K, -7.6 M (vacío = el de la banda)"),
         Field("mode", "Modo", repeater.mode if repeater else "FM",
               placeholder="FM, C4FM, DMR, DSTAR"),
         Field("ctcss_tx", "Subtono CTCSS", repeater.ctcss_tx if repeater else "",

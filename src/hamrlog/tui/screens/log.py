@@ -22,7 +22,7 @@ from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Static
 
-from ...core import bands, modes
+from ...core import bands, modes, units
 from ...core.dto import QsoRow
 from ...core.services import QsoService, ServiceError
 from ...core.state import SessionState
@@ -208,8 +208,10 @@ class LogScreen(ModalScreen[bool]):
             Field("name", "Nombre"),
             Field("band", "Banda", self.state.band, placeholder="40m"),
             Field(
-                "freq", "Frecuencia", bands.format_frequency(self.state.freq_hz),
-                placeholder="7.130",
+                "freq",
+                f"Frecuencia ({units.active().unit})",
+                bands.format_frequency(self.state.freq_hz, with_unit=False),
+                placeholder=units.active().format(7_130_000, with_unit=False),
             ),
             Field("mode", "Modo", self.state.mode, placeholder="SSB"),
             Field("rst_sent", "RST enviado", modes.default_rst(self.state.mode)),
@@ -309,7 +311,12 @@ def _edit_fields(row: QsoRow, editable: frozenset[str]) -> list[Field]:
         make("time", "Hora UTC", row.qso_utc.strftime("%H:%M:%S"), "qso_utc"),
         make("name", "Nombre", row.name),
         make("band", "Banda", row.band),
-        make("freq", "Frecuencia", bands.format_frequency(row.freq_hz), "freq_hz"),
+        make(
+            "freq",
+            f"Frecuencia ({units.active().unit})",
+            bands.format_frequency(row.freq_hz, with_unit=False),
+            "freq_hz",
+        ),
         make("mode", "Modo", row.mode),
         make("repeater_call", "Repetidor", row.repeater_call),
         make("rst_sent", "RST enviado", row.rst_sent),

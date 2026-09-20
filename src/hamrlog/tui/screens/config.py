@@ -16,6 +16,7 @@ from textual.widgets.option_list import Option
 
 from ... import __version__
 from ...core import entry as entry_parser
+from ...core import units
 from ...core.services import OperatorService, ServiceError, SettingsService
 from ...core.state import SessionState
 from ...db.session import default_database_url
@@ -58,7 +59,8 @@ class ConfigScreen(ModalScreen[bool]):
     _SECTIONS: tuple[tuple[str, str, str], ...] = (
         ("operator", "Operador activo", "Quién registra los contactos de esta sesión"),
         ("operators", "Gestionar operadores", "Crear, editar y desactivar operadores"),
-        ("entry", "Entrada rápida", "Orden de los campos y separador de la línea"),
+        ("entry", "Entrada rápida", "Orden de las casillas y validación de indicativos"),
+        ("units", "Unidades y formato", "Unidad de frecuencia y separadores numéricos"),
         ("history", "Histórico y agenda", "Dirección de la lista y enlace con los contactos"),
         ("transfer", "Importar y exportar", "Registro en ADIF y CSV (o /exportar)"),
         ("metrics", "Métricas Prometheus", "Exportador HTTP para monitorización"),
@@ -103,6 +105,7 @@ class ConfigScreen(ModalScreen[bool]):
             "operator": self._pick_operator,
             "operators": self._manage_operators,
             "entry": self._edit_entry_format,
+            "units": self._edit_units,
             "history": self._edit_history,
             "transfer": self._open_transfer,
             "metrics": self._edit_metrics,
@@ -283,6 +286,59 @@ class ConfigScreen(ModalScreen[bool]):
             "[green]Casillas de entrada:[/green] "
             + " → ".join(resolved)
             + f"\n[green]Validación de indicativos:[/green] {_VALIDATION_LABELS[validation]}"
+        )
+
+    # --------------------------------------------------------------- units --
+    def _edit_units(self) -> None:
+        current = self.state.frequency_format
+        fields = [
+            Field("unit", "Unidad de frecuencia", current.unit, placeholder="M, K o Hz"),
+            Field("decimal", "Separador decimal", current.decimal, placeholder=". o ,"),
+            Field(
+                "thousands",
+                "Separador de millar",
+                units.describe_separator(current.thousands),
+                placeholder=". , espacio ' u ocultar",
+            ),
+        ]
+        self.app.push_screen(
+            FormScreen(
+                "Unidades y formato",
+                fields,
+                subtitle="Se aplica a todas las frecuencias que veas y escribas. "
+                "La unidad puede escribirse como M, K o Hz, en mayúsculas o "
+                "minúsculas y con «Hz» o sin él.\n"
+                "El separador de millar y el decimal no pueden ser el mismo; "
+                "«ocultar» deja las cifras sin agrupar.\n"
+                "La exportación ADIF no se ve afectada: la norma fija megahercios "
+                "con punto.",
+                save_label="Aplicar",
+            ),
+            self._save_units,
+        )
+
+    def _save_units(self, values: dict[str, str] | None) -> None:
+        if not values:
+            return
+        try:
+            unit = units.normalize_unit(values.get("unit", ""))
+            decimal = units.parse_separator(values.get("decimal", ""), allow_hidden=False)
+            thousands = units.parse_separator(
+                values.get("thousands", ""), allow_hidden=True
+            )
+            chosen = units.FrequencyFormat(unit, decimal, thousands)
+        except units.UnitError as exc:
+            self.app.notify(str(exc), severity="error")
+            return
+
+        self.state.freq_unit = chosen.unit
+        self.state.decimal_separator = chosen.decimal
+        self.state.thousands_separator = chosen.thousands
+        self.state.apply_frequency_format()
+        self._changed = True
+        self._result(
+            f"[green]Frecuencias:[/green] {chosen.summary}\n"
+            f"[dim]Por ejemplo: {chosen.example}[/dim]"
         )
 
     # ------------------------------------------------------------- history --

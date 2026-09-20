@@ -8,9 +8,18 @@ from __future__ import annotations
 
 import pytest
 
+from hamrlog.core import units
 from hamrlog.core.services import OperatorService, StationService
 from hamrlog.core.state import SessionState
 from hamrlog.db import session as db_session
+
+
+@pytest.fixture(autouse=True)
+def default_frequency_format():
+    """Frequency presentation is module-level state; reset it per test."""
+    units.set_active(units.FrequencyFormat())
+    yield
+    units.set_active(units.FrequencyFormat())
 
 
 @pytest.fixture(autouse=True)

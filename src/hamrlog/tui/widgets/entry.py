@@ -41,7 +41,7 @@ FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
     "comment": ("NOTAS", None),
     "band": ("BANDA", 7),
     "mode": ("MODO", 8),
-    "freq_hz": ("FREC", 12),
+    "freq_hz": ("FREC", 13),
     "power_w": ("POT", 5),
     "talkgroup": ("TG", 8),
     "reflector": ("REFL", 10),

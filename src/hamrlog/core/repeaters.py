@@ -8,6 +8,7 @@ own parameters (color code, talkgroup, reflector, room).
 
 from __future__ import annotations
 
+from . import units
 from .bands import KHZ, MHZ
 
 #: Conventional repeater shift per band, IARU Region 1. Negative means the
@@ -45,49 +46,52 @@ def input_frequency(output_hz: int, shift_hz: int) -> int:
 
 
 def parse_shift(text: str) -> int | None:
-    """Parse a shift as the operator writes it on a radio.
+    """Parse a repeater shift as the operator writes it on a radio.
 
-    Accepts ``-600``, ``-600 kHz``, ``-7.6 MHz``, ``+5 MHz`` and plain hertz.
-    A bare number is read as kilohertz, which is how shifts are spoken.
+    Accepts ``-600``, ``-600 K``, ``-7.6 MHz``, ``+5 M`` and plain hertz, in
+    any capitalisation. A bare number is read as kilohertz whatever the
+    display preference is: shifts are spoken in kilohertz, and reading "-600"
+    as megahertz would be nonsense.
 
     Returns:
         The shift in hertz, or None when it cannot be understood. Zero is a
         valid result and means simplex.
     """
-    raw = text.strip().lower().replace(" ", "")
+    raw = text.strip()
     if not raw:
         return None
 
     sign = 1
     if raw.startswith("-"):
-        sign, raw = -1, raw[1:]
+        sign, raw = -1, raw[1:].strip()
     elif raw.startswith("+"):
-        raw = raw[1:]
+        raw = raw[1:].strip()
 
-    unit = KHZ
-    for suffix, scale in (("mhz", MHZ), ("khz", KHZ), ("hz", 1)):
-        if raw.endswith(suffix):
-            unit = scale
-            raw = raw[: -len(suffix)]
-            break
-
-    raw = raw.replace(",", ".")
-    try:
-        value = float(raw)
-    except ValueError:
+    kilohertz = units.FrequencyFormat(
+        units.UNIT_KHZ, units.active().decimal, units.active().thousands
+    )
+    magnitude = kilohertz.parse(raw)
+    if magnitude is None:
         return None
-    return int(round(sign * value * unit))
+    return sign * magnitude
 
 
 def format_shift(shift_hz: int | None) -> str:
-    """Render a shift the way a radio displays it, e.g. '-600 kHz'."""
+    """Render a shift the way a radio displays it, e.g. '-600 KHz'.
+
+    Always in kilohertz below a megahertz and megahertz above, regardless of
+    the display preference: that is how repeater shifts are written.
+    """
     if not shift_hz:
         return "simplex"
     sign = "-" if shift_hz < 0 else "+"
     magnitude = abs(shift_hz)
-    if magnitude >= MHZ:
-        return f"{sign}{magnitude / MHZ:g} MHz"
-    return f"{sign}{magnitude // KHZ} kHz"
+    chosen = units.UNIT_MHZ if magnitude >= MHZ else units.UNIT_KHZ
+    current = units.active()
+    rendered = units.FrequencyFormat(
+        chosen, current.decimal, current.thousands
+    ).format(magnitude)
+    return f"{sign}{rendered}"
 
 
 def normalize_tone(text: str) -> str:

@@ -133,6 +133,8 @@ class HamrlogApp(App[None]):
     async def on_mount(self) -> None:
         init_engine(self.database_url)
         self._load_initial_state()
+        # Before anything renders a frequency.
+        self.state.apply_frequency_format()
         self._maybe_start_metrics()
         self.query_one(HistoryPanel).order = self.state.history_order
         self.query_one(HistoryPanel).load(QsoService.recent())
@@ -236,8 +238,14 @@ class HamrlogApp(App[None]):
         status.digital_summary = modes.status_summary(
             self.state.digital_data, has_repeater=self.state.via_repeater
         )
+        self.state.apply_frequency_format()
         self.query_one(EntryPanel).set_hint(self.state.field_order)
-        self.query_one(HistoryPanel).set_order(self.state.history_order)
+        history = self.query_one(HistoryPanel)
+        history.set_order(self.state.history_order)
+        history.refresh_headers()
+        # Reactives only redraw when their value changes, and a format change
+        # leaves every value untouched.
+        status.refresh()
         if not self.query_one(HistoryPanel).selected_qso_id():
             self._refresh_detail(None)
 

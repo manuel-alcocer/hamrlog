@@ -18,7 +18,7 @@ from rich.text import Text
 from textual.message import Message
 from textual.widgets import DataTable
 
-from ...core import bands
+from ...core import bands, units
 from ...core.dto import QsoRow
 
 #: Row key of the insert row. QSO rows are keyed by their id.
@@ -37,7 +37,7 @@ COLUMNS: tuple[tuple[str, int | None], ...] = (
     ("INDICATIVO", 12),
     ("NOMBRE", 11),
     ("BANDA", 6),
-    ("FRECUENCIA", 11),
+    ("FRECUENCIA", 12),
     ("MODO", 7),
     ("E/R", 8),
     ("PAÍS", 14),
@@ -66,7 +66,28 @@ class HistoryPanel(DataTable):
         self.cursor_type = "row"
         self.zebra_stripes = True
         for label, width in COLUMNS:
-            self.add_column(Text(label, style="bold"), width=width, key=label)
+            self.add_column(Text(self._header(label), style="bold"), width=width, key=label)
+
+    @staticmethod
+    def _header(label: str) -> str:
+        """Column heading, with the unit where the values carry one.
+
+        Repeating "MHz" on every row wastes the width the number needs, so
+        the unit is stated once at the top.
+        """
+        if label == "FRECUENCIA":
+            # Abbreviated so the heading with its unit fits the column the
+            # numbers need.
+            return f"FREC ({units.active().unit})"
+        return label
+
+    def refresh_headers(self) -> None:
+        """Redraw the headings after the frequency format changed."""
+        for label, _ in COLUMNS:
+            column = self.columns.get(label)
+            if column is not None:
+                column.label = Text(self._header(label), style="bold")
+        self.refresh()
 
     # -------------------------------------------------------------- state --
     @property
@@ -177,7 +198,7 @@ class HistoryPanel(DataTable):
             call,
             Text(row.name or "-"),
             Text(row.band or "-", style="yellow"),
-            Text(bands.format_frequency(row.freq_hz)),
+            Text(bands.format_frequency(row.freq_hz, with_unit=False)),
             Text(row.mode or "-", style="green"),
             Text(f"{row.rst_sent}/{row.rst_rcvd}".strip("/") or "-"),
             Text(row.country or "-", style="dim"),

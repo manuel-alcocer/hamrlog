@@ -1174,8 +1174,8 @@ async def test_detail_shows_both_frequencies_over_a_repeater(operator):
         await pilot.pause()
         text = str(app.query_one(DetailPanel).render())
         assert "ED7ZAE" in text
-        assert "145.600.000" in text
-        assert "TX 145.000.000" in text
+        assert "145.600" in text
+        assert "TX 145.000" in text
 
 
 async def test_detail_marks_a_manual_qso(operator):
@@ -1198,3 +1198,114 @@ async def test_detail_marks_a_manual_qso(operator):
         text = str(app.query_one(DetailPanel).render())
         assert "MANUAL" in text
         assert "2026-01-15 12:30:00" in text
+
+
+async def test_frequency_format_applies_across_the_interface(operator):
+    from hamrlog.core import units
+    from hamrlog.tui.widgets.menubar import StatusLine
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await type_line(pilot, app, "/banda 40m")
+        await type_line(pilot, app, "ea4abc,Juan")
+
+        # Default: megahertz, dot, no grouping.
+        assert "7.130 MHz" in str(app.query_one(StatusLine).render())
+        assert "7.130 MHz" in str(app.query_one(DetailPanel).render())
+
+        # Switching the format redraws everything.
+        app.state.freq_unit = units.UNIT_HZ
+        app.state.decimal_separator = ","
+        app.state.thousands_separator = "."
+        app._refresh_status()
+        app._reload_history()
+        await pilot.pause()
+
+        assert "7.130.000 Hz" in str(app.query_one(StatusLine).render())
+        assert "7.130.000 Hz" in str(app.query_one(DetailPanel).render())
+
+
+async def test_frequency_command_reads_the_configured_unit(operator):
+    from hamrlog.core import units
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        # Megahertz by default, so a bare number is megahertz.
+        await type_line(pilot, app, "/frec 14.250")
+        assert app.state.freq_hz == 14_250_000
+
+        # A unit written by hand wins.
+        await type_line(pilot, app, "/frec 7130 K")
+        assert app.state.freq_hz == 7_130_000
+
+        app.state.freq_unit = units.UNIT_KHZ
+        app.state.apply_frequency_format()
+        await type_line(pilot, app, "/frec 21300")
+        assert app.state.freq_hz == 21_300_000
+
+
+async def test_units_are_configurable_from_the_settings(operator):
+    from hamrlog.tui.screens.config import ConfigScreen
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 34)) as pilot:
+        await pilot.press("f5")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfigScreen)
+
+        sections = app.screen.query_one("#sections")
+        ids = [sections.get_option_at_index(i).id for i in range(sections.option_count)]
+        assert "units" in ids
+
+        sections.highlighted = ids.index("units")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        (await wait_for(pilot, app, "#field-unit")).value = "k"
+        app.screen.query_one("#field-decimal").value = ","
+        app.screen.query_one("#field-thousands").value = "."
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+        # Lower case k is stored as K.
+        assert app.state.freq_unit == "KHz"
+        assert app.state.decimal_separator == ","
+        assert app.state.thousands_separator == "."
+
+
+async def test_settings_refuse_the_same_separator_twice(operator):
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 34)) as pilot:
+        await pilot.press("f5")
+        await pilot.pause()
+        sections = app.screen.query_one("#sections")
+        ids = [sections.get_option_at_index(i).id for i in range(sections.option_count)]
+        sections.highlighted = ids.index("units")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        (await wait_for(pilot, app, "#field-unit")).value = "M"
+        app.screen.query_one("#field-decimal").value = "."
+        app.screen.query_one("#field-thousands").value = "."
+        await pilot.press("ctrl+s")
+        await pilot.pause()
+
+        # Rejected: the settings are unchanged and the default still stands.
+        assert app.state.decimal_separator == "."
+        assert app.state.thousands_separator == ""
+
+
+async def test_frequency_format_survives_a_restart(operator):
+    from hamrlog.core.services import SettingsService
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        app.state.freq_unit = "KHz"
+        app.state.thousands_separator = " "
+        SettingsService.save_state(app.state)
+        await pilot.pause()
+
+    restored = SettingsService.load_state()
+    assert restored.freq_unit == "KHz"
+    assert restored.frequency_format.format(7_130_000) == "7 130 KHz"

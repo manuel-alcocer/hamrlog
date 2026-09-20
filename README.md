@@ -373,6 +373,35 @@ cargue solo al arrancar.
 
 Siempre se pide confirmación, indicando indicativo, fecha, banda y modo.
 
+### Frecuencias y unidades
+
+Toda frecuencia lleva unidad. En **F5 → Unidades y formato** se elige la que se
+usa al mostrarlas y la que se supone al escribir un número sin unidad:
+
+| Se escribe | Se guarda como |
+|---|---|
+| `M`, `m`, `mhz`, `MHZ`, `MHz` | `MHz` |
+| `K`, `k`, `khz`, `KHZ` | `KHz` |
+| `hz`, `HZ`, `hZ`, `Hz` | `Hz` |
+
+La unidad escrita a mano manda sobre la configurada: con la preferencia en
+`MHz`, `7130 K` sigue siendo kilohercios.
+
+El **separador decimal** y el **de millar** también se configuran. Nunca pueden
+ser el mismo, y el de millar admite «ocultar»:
+
+| Unidad | Decimal | Millar | 7.130.000 Hz se ve |
+|---|---|---|---|
+| MHz | `.` | ocultar | `7.130 MHz` |
+| KHz | `.` | `,` | `7,130 KHz` |
+| Hz | `,` | `.` | `7.130.000 Hz` |
+| Hz | `.` | espacio | `7 130 000 Hz` |
+
+Dos excepciones deliberadas: los **desplazamientos de repetidor** sin unidad
+son siempre kilohercios, porque así se escriben en las radios; y la
+**exportación ADIF** mantiene megahercios con punto, que es lo que fija la
+norma para que el fichero lo lea cualquier otro programa.
+
 ### Indicativos mal escritos
 
 Al teclear, el indicativo se contrasta con la forma que tiene uno real
@@ -482,7 +511,7 @@ servicios. Consulta [docs/arquitectura.md](docs/arquitectura.md).
 
 ```bash
 pip install -e ".[dev,metrics,api]"
-pytest                  # 235 pruebas, incluidas las de la interfaz
+pytest                  # 306 pruebas, incluidas las de la interfaz
 ruff check src tests
 ```
 

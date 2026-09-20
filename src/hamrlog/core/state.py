@@ -10,7 +10,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from . import bands, modes
+from . import bands, modes, units
 from .entry import DEFAULT_FIELD_ORDER, DEFAULT_VALIDATION
 
 
@@ -31,6 +31,9 @@ class SessionState:
         field_order: Positional mapping of the fast entry line.
         separator: Token separator of the fast entry line.
         callsign_validation: "strict", "warn" or "off".
+        freq_unit: Unit frequencies are shown in and assumed when typed.
+        decimal_separator: Decimal separator for frequencies.
+        thousands_separator: Thousands separator, empty to hide grouping.
         autofill_from_book: Fill missing name and QTH from the address book.
         add_to_book: Add a station to the address book the first time it is
             worked, so the book grows with the log.
@@ -51,6 +54,9 @@ class SessionState:
     field_order: tuple[str, ...] = DEFAULT_FIELD_ORDER
     separator: str = ","
     callsign_validation: str = DEFAULT_VALIDATION
+    freq_unit: str = units.UNIT_MHZ
+    decimal_separator: str = "."
+    thousands_separator: str = ""
     autofill_from_book: bool = True
     add_to_book: bool = True
     history_order: str = "asc"
@@ -59,6 +65,24 @@ class SessionState:
     @property
     def via_repeater(self) -> bool:
         return self.repeater_id is not None
+
+    @property
+    def frequency_format(self) -> units.FrequencyFormat:
+        """How frequencies should be shown and read.
+
+        Falls back to the default when the stored settings are unusable, so a
+        hand-edited value can never stop the application from starting.
+        """
+        try:
+            return units.FrequencyFormat(
+                self.freq_unit, self.decimal_separator, self.thousands_separator
+            )
+        except units.UnitError:
+            return units.FrequencyFormat()
+
+    def apply_frequency_format(self) -> None:
+        """Make this state's format the one the whole application uses."""
+        units.set_active(self.frequency_format)
 
     def set_band(self, band_name: str, *, move_frequency: bool = True) -> None:
         """Select a band and, unless told otherwise, jump to its default frequency.
