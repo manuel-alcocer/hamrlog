@@ -4,7 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hamrlog"
-version = "0.1.0"
+# Single source of truth: src/hamrlog/__init__.py
+dynamic = ["version"]
 description = "Cross-platform terminal logbook for amateur radio operators"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -47,6 +48,9 @@ dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
 
 [project.scripts]
 hamrlog = "hamrlog.cli:main"
+
+[tool.hatch.version]
+path = "src/hamrlog/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/hamrlog"]

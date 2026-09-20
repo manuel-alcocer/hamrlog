@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from .. import __version__
 from ..core.services import OperatorService, QsoService
 from ..db.session import init_engine
 from .schemas import qso_to_dict, stats_to_dict
@@ -35,7 +36,7 @@ def create_app(database_url: str | None = None) -> Any:
         ) from exc
 
     init_engine(database_url)
-    application = FastAPI(title="hamrlog", version="0.1.0")
+    application = FastAPI(title="hamrlog", version=__version__)
 
     @application.get("/health")
     def health() -> dict[str, str]:

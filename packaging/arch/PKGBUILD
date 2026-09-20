@@ -1,6 +1,6 @@
 # Maintainer: Manuel Alcocer <manuel@alcocer.net>
 pkgname=hamrlog
-pkgver=0.1.0
+pkgver=0.2.0
 pkgrel=1
 pkgdesc="Diario de contactos para radioaficionados, en modo texto"
 arch=('any')

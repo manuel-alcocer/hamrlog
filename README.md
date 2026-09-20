@@ -513,7 +513,7 @@ servicios. Consulta [docs/arquitectura.md](docs/arquitectura.md).
 
 ```bash
 pip install -e ".[dev,metrics,api]"
-pytest                  # 308 pruebas, incluidas las de la interfaz
+pytest                  # 319 pruebas, incluidas las de la interfaz
 ruff check src tests
 ```
 
@@ -524,6 +524,10 @@ un terminal real.
 Los comentarios y los identificadores del código están en inglés; los textos
 que ve el usuario, en español.
 
+## Cambios
+
+Los de cada versión están en [CHANGELOG.md](CHANGELOG.md).
+
 ## Publicar una versión
 
 Las releases se construyen solas: etiquetar y empujar compila el ejecutable de
@@ -531,9 +535,11 @@ Linux, el de Windows y el instalador, comprueba que las pruebas pasan y que
 cada binario arranca, y lo publica todo con sus sumas SHA-256.
 
 ```bash
-# Sube la versión en pyproject.toml y en packaging/arch/PKGBUILD
-git tag -a v0.2.0 -m "v0.2.0"
-git push origin v0.2.0
+# El número vive en src/hamrlog/__init__.py; súbelo también en
+# packaging/arch/PKGBUILD y packaging/windows/hamrlog.iss (hay pruebas que
+# comprueban que no se queden atrás)
+git tag -a v0.3.0 -m "v0.3.0"
+git push origin v0.3.0
 ```
 
 Los detalles están en [packaging/README.md](packaging/README.md).

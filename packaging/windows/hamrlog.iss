@@ -12,7 +12,7 @@
 #define AppExeName "hamrlog.exe"
 
 #ifndef HamrlogVersion
-  #define HamrlogVersion "0.1.0"
+  #define HamrlogVersion "0.2.0"
 #endif
 
 [Setup]
