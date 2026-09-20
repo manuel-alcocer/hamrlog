@@ -28,15 +28,15 @@ classifiers = [
     "Topic :: Communications :: Ham Radio",
 ]
 
-[project.urls]
-Homepage = "https://github.com/manuel-alcocer/hamrlog"
-Repository = "https://github.com/manuel-alcocer/hamrlog"
-Issues = "https://github.com/manuel-alcocer/hamrlog/issues"
-
 dependencies = [
     "textual>=1.0",
     "sqlalchemy>=2.0",
 ]
+
+[project.urls]
+Homepage = "https://github.com/manuel-alcocer/hamrlog"
+Repository = "https://github.com/manuel-alcocer/hamrlog"
+Issues = "https://github.com/manuel-alcocer/hamrlog/issues"
 
 [project.optional-dependencies]
 # Prometheus exporter. Enabled at runtime only when installed.
