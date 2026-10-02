@@ -2,6 +2,34 @@
 
 ## Sin publicar
 
+### Solo la pantalla principal
+
+Las pantallas de menú se retiran para rediseñarlas; queda la vista principal.
+
+- Desaparecen la barra de menús, los atajos `Alt`+letra, `Ctrl+F1`/`F12` y las
+  pantallas Registro, Banda, Frec, Modo, Config, Equipo, Perfiles, Contactos,
+  Rptr, Ayuda e importar/exportar.
+- La sesión se cambia con comandos: `/banda 40m`, `/frec 7.100`, `/modo SSB`,
+  `/perfil nombre`, `/repetidor IND`, `/directo`. Sin valor, cada uno dice
+  cómo se usa, y `/ayuda` los lista bajo la línea de entrada.
+- Ya no existen `/equipo`, `/config`, `/registro`, `/contactos`, `/exportar`
+  ni `/importar`. Importar y exportar siguen en la línea de órdenes.
+- Sobre un QSO del histórico, `D` suprime, `R` repite y `E` lo edita en la
+  propia línea de entrada, sin abrir nada: aparecen sus valores y una segunda
+  fila con frecuencia y modo; `Enter` guarda y `Esc` cancela. La banda no se
+  escribe: se calcula a partir de la frecuencia.
+- Un QSO automático admite corregir cualquier campo salvo la fecha y la hora
+  (antes, solo el indicativo).
+- Al registrar un QSO con nombre, si el indicativo ya estaba en la agenda pero
+  sin nombre, la ficha lo toma. Si no estaba, se crea con él, como antes.
+- Se mantienen la confirmación de borrado, el asistente del primer arranque y
+  la petición de datos de los modos digitales.
+- Sin interfaz por ahora: agenda, alta de equipos, antenas,
+  repetidores y configuraciones, cambio de operador y ajustes. Los datos y los
+  servicios no se han tocado.
+
+Las entradas de más abajo que describen esas pantallas quedan como historial.
+
 ### Sin ventanas flotantes, solo teclado
 
 - Los menús ya no se abren como ventanas superpuestas: su contenido ocupa la

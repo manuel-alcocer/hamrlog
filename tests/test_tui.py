@@ -4,15 +4,7 @@ from __future__ import annotations
 
 from hamrlog.core.services import QsoService
 from hamrlog.tui.app import HamrlogApp
-from hamrlog.tui.screens.base import ConfirmScreen, SelectionScreen
-from hamrlog.tui.screens.config import ConfigScreen
-from hamrlog.tui.screens.contacts import ContactsScreen
-from hamrlog.tui.screens.help import HelpScreen
-from hamrlog.tui.screens.log import LogScreen
-from hamrlog.tui.screens.profiles import ProfileScreen
-from hamrlog.tui.screens.repeaters import RepeaterScreen
-from hamrlog.tui.screens.selectors import FrequencyScreen
-from hamrlog.tui.screens.stations import StationScreen
+from hamrlog.tui.screens.base import ConfirmScreen, FormScreen
 from hamrlog.tui.widgets.detail import DetailPanel
 from hamrlog.tui.widgets.entry import EntryPanel
 from hamrlog.tui.widgets.history import HistoryPanel
@@ -89,28 +81,6 @@ async def test_duplicate_warning_appears_while_typing(operator):
         assert "DUPLICADO" in feedback
 
 
-async def test_alt_keys_open_their_screens(operator, station):
-    app = HamrlogApp()
-    expected = {
-        "alt+r": LogScreen,
-        "alt+b": SelectionScreen,
-        "alt+f": FrequencyScreen,
-        "alt+m": SelectionScreen,
-        "alt+c": ConfigScreen,
-        "alt+e": StationScreen,
-        "alt+p": ProfileScreen,
-        "alt+o": ContactsScreen,
-        "alt+t": RepeaterScreen,
-    }
-    async with app.run_test(size=(120, 30)) as pilot:
-        for key, screen_type in expected.items():
-            await pilot.press(key)
-            await pilot.pause()
-            assert isinstance(app.screen, screen_type), key
-            await pilot.press("escape")
-            await pilot.pause()
-
-
 async def test_band_command_changes_the_session(operator):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
@@ -147,18 +117,12 @@ async def test_new_contacts_inherit_the_changed_configuration(operator):
         assert row.rst_sent == "599"
 
 
-async def test_digital_mode_is_in_the_single_mode_selector(operator):
-    """Analogue and digital modes share one list, reached with Alt+M."""
+async def test_digital_mode_asks_for_its_extra_fields(operator):
+    """``/modo DMR`` applies the mode and asks for what it needs."""
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+m")
-        await pilot.pause()
-        (await wait_for(pilot, app, "#filter")).value = "DMR"
-        await pilot.pause()
-        await pilot.press("enter")
-        await pilot.pause()
+        await type_line(pilot, app, "/modo DMR")
 
-        # The mode is applied and its extra fields are requested.
         assert app.state.mode == "DMR"
         (await wait_for(pilot, app, "#field-talkgroup")).value = "21466"
         await pilot.press("ctrl+s")
@@ -167,112 +131,6 @@ async def test_digital_mode_is_in_the_single_mode_selector(operator):
         assert app.state.digital_data["talkgroup"] == "21466"
         await type_line(pilot, app, "ea5zz,pepe")
         assert QsoService.recent()[-1].digital_data["talkgroup"] == "21466"
-
-
-async def test_profile_saves_and_reloads_the_configuration(operator, station):
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await type_line(pilot, app, "/banda 20m")
-        await type_line(pilot, app, "/modo cw")
-
-        await pilot.press("alt+p")
-        await pilot.pause()
-        await pilot.press("g")
-        await pilot.pause()
-        (await wait_for(pilot, app, "#field-name")).value = "CW-20m"
-        await pilot.press("ctrl+s")
-        await pilot.pause()
-        assert app.state.profile_name == "CW-20m"
-
-        await type_line(pilot, app, "/banda 40m")
-        assert app.state.band == "40m"
-
-        await type_line(pilot, app, "/perfil CW-20m")
-        assert app.state.band == "20m"
-        assert app.state.mode == "CW"
-
-
-async def test_profiles_walk_station_antenna_then_configuration(operator):
-    """Alt+P: station, → its antennas, → the configurations on their bands."""
-    from hamrlog.core.services import (
-        AntennaService,
-        ProfileService,
-        StationService,
-        StationTypeService,
-    )
-    from hamrlog.core.state import SessionState
-
-    rig = StationService.create(
-        "ICOM IC-705", type_ids=StationTypeService.resolve("HF, VHF, UHF")
-    )
-    efhw = AntennaService.create("EFHW", ["40m", "20m"])
-    x300 = AntennaService.create("Diamond X300N", ["2m", "70cm"])
-    StationService.assign_antenna(rig.id, efhw.id)
-    StationService.assign_antenna(rig.id, x300.id)
-    StationService.create("Kenwood TM-241E", type_ids=StationTypeService.resolve("VHF"))
-
-    terminal = SessionState()
-    terminal.set_band("2m")
-    terminal.set_mode("DMR")
-    ProfileService.save_from_state("Terminal Mode INT", terminal, station_id=rig.id)
-    twenty = SessionState()
-    twenty.set_band("20m")
-    twenty.set_mode("SSB")
-    ProfileService.save_from_state("20m", twenty, station_id=rig.id)
-
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+p")
-        await pilot.pause()
-        screen = app.screen
-        assert isinstance(screen, ProfileScreen)
-        assert app.focused.id == "column-0"
-
-        # Antennas are listed by name: Diamond X300N, then EFHW.
-        await pilot.press("right")
-        await pilot.pause()
-        assert app.focused.id == "column-1"
-        await pilot.press("right")
-        await pilot.pause()
-        assert app.focused.id == "column-2"
-        assert list(screen._profiles.values())[0].name == "Terminal Mode INT"
-        assert len(screen._profiles) == 1
-
-        await pilot.press("left", "down", "right")
-        await pilot.pause()
-        assert [p.name for p in screen._profiles.values()] == ["20m"]
-
-        await pilot.press("enter")
-        await pilot.pause()
-        assert not isinstance(app.screen, ProfileScreen)
-        assert app.state.station_id == rig.id
-        assert app.state.antenna_id == efhw.id
-        assert app.state.profile_name == "20m"
-        assert app.state.band == "20m"
-
-
-async def test_station_screen_picks_the_rig_and_its_antenna(operator):
-    """Alt+E: the rig on the left, its antennas on the right."""
-    from hamrlog.core.services import AntennaService, StationService
-
-    rig = StationService.create("Anytone AT-878UV", power_w=7)
-    for name in ("Diamond SG7900", "Nagoya NA-771"):
-        StationService.assign_antenna(rig.id, AntennaService.create(name, ["2m", "70cm"]).id)
-    nagoya = AntennaService.list_all()[1]
-
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+e")
-        await pilot.pause()
-        await pilot.press("enter", "down", "enter")
-        await pilot.pause()
-        assert not isinstance(app.screen, StationScreen)
-        assert app.state.station_id == rig.id
-        assert app.state.antenna_id == nagoya.id
-
-        await type_line(pilot, app, "ea4abc,juan")
-        row = QsoService.recent()[-1]
-        assert (row.station_name, row.antenna_name) == ("Anytone AT-878UV", "Nagoya NA-771")
 
 
 async def test_line_recall_walks_previous_entries(operator):
@@ -293,22 +151,6 @@ async def test_line_recall_walks_previous_entries(operator):
         await pilot.press("ctrl+down")
         await pilot.pause()
         assert entry.values()["call"] == "ea2bbb"
-
-
-async def test_log_screen_lists_the_qsos(operator):
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await type_line(pilot, app, "ea1aaa")
-        await type_line(pilot, app, "ea2bbb")
-
-        await pilot.press("alt+r")
-        await pilot.pause()
-        assert isinstance(app.screen, LogScreen)
-        assert app.screen.query_one("#log-table").row_count == 2
-
-        (await wait_for(pilot, app, "#search")).value = "ea1"
-        await pilot.pause()
-        assert app.screen.query_one("#log-table").row_count == 1
 
 
 async def test_first_run_asks_for_a_callsign(tmp_path):
@@ -395,47 +237,6 @@ async def test_deleting_with_an_empty_log_is_harmless(operator):
         assert "borrar" in str(app.query_one("#entry-feedback").render())
 
 
-async def test_log_screen_opens_focused_on_the_table(operator):
-    """Delete must work as soon as Alt+R opens, without moving the focus first."""
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await type_line(pilot, app, "ea1aaa")
-        await type_line(pilot, app, "ea2bbb")
-
-        await pilot.press("alt+r")
-        await pilot.pause()
-        assert app.focused.id == "log-table"
-
-        await pilot.press("delete")
-        await pilot.pause()
-        assert isinstance(app.screen, ConfirmScreen)
-        await pilot.press("s")
-        await pilot.pause()
-        assert QsoService.stats().total == 1
-
-
-async def test_log_screen_deletes_while_searching(operator):
-    """Ctrl+D has priority, so it works even with the search box focused."""
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await type_line(pilot, app, "ea1aaa")
-        await type_line(pilot, app, "ea2bbb")
-
-        await pilot.press("alt+r")
-        await pilot.pause()
-        app.screen.query_one("#search").focus()
-        app.screen.query_one("#search").value = "ea2"
-        await pilot.pause()
-
-        await pilot.press("ctrl+d")
-        await pilot.pause()
-        assert isinstance(app.screen, ConfirmScreen)
-        await pilot.press("s")
-        await pilot.pause()
-
-        assert [row.call for row in QsoService.recent()] == ["EA1AAA"]
-
-
 async def test_main_history_shows_date_and_time(operator):
     from hamrlog.tui.widgets.history import COLUMNS
 
@@ -450,21 +251,14 @@ async def test_main_history_shows_date_and_time(operator):
         assert str(cell) == stamp
 
 
-async def test_f9_opens_the_repeater_screen_and_direct_works(operator):
+async def test_repeater_and_direct_commands(operator):
     from hamrlog.core.services import RepeaterService
 
     RepeaterService.create("ED7ZAE", name="Sevilla", output_hz=145_600_000, ctcss_tx="88.5")
 
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+t")
-        await pilot.pause()
-        assert isinstance(app.screen, RepeaterScreen)
-
-        # The list starts with DIRECTO, so the repeater is the second entry.
-        app.screen.query_one("#repeaters").highlighted = 1
-        await pilot.press("enter")
-        await pilot.pause()
+        await type_line(pilot, app, "/repetidor ED7ZAE")
 
         assert app.state.via_repeater
         assert app.state.repeater_call == "ED7ZAE"
@@ -514,82 +308,6 @@ async def test_changing_band_leaves_the_repeater_in_the_interface(operator):
         assert app.state.band == "20m"
 
 
-async def test_import_export_is_reachable_from_config(operator):
-    """Alt+T became the repeater, so the log transfer moved into the config."""
-    from hamrlog.tui.screens.transfer import TransferScreen
-
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+c")
-        await pilot.pause()
-        sections = app.screen.query_one("#sections")
-        ids = [sections.get_option_at_index(i).id for i in range(sections.option_count)]
-        assert "transfer" in ids
-
-        sections.highlighted = ids.index("transfer")
-        await pilot.press("enter")
-        await pilot.pause()
-        assert isinstance(app.screen, TransferScreen)
-
-        # The command still works too.
-        await pilot.press("escape")
-        await pilot.pause()
-        await pilot.press("escape")
-        await pilot.pause()
-        await type_line(pilot, app, "/exportar")
-        assert isinstance(app.screen, TransferScreen)
-
-
-async def test_log_and_contacts_are_separate_screens(operator):
-    """Alt+R is what you worked, Alt+O is who they are: two screens, not two tabs."""
-    from hamrlog.core.services import ContactService
-
-    ContactService.create("EA7WM", first_name="Manuel", city="Sevilla", dmr_id=2147001)
-
-    app = HamrlogApp()
-    async with app.run_test(size=(140, 34)) as pilot:
-        await type_line(pilot, app, "ea4abc,juan")
-
-        await pilot.press("alt+r")
-        await pilot.pause()
-        assert isinstance(app.screen, LogScreen)
-        assert app.screen.query_one("#log-table").row_count == 1
-
-        # Alt+O from the log swaps to the address book without stacking screens.
-        await pilot.press("alt+o")
-        await pilot.pause()
-        assert isinstance(app.screen, ContactsScreen)
-        # EA7WM was already there; EA4ABC was added by the QSO just logged.
-        assert app.screen.query_one("#book-table").row_count == 2
-
-        # Alt+R goes back the same way.
-        await pilot.press("alt+r")
-        await pilot.pause()
-        assert isinstance(app.screen, LogScreen)
-
-        await pilot.press("escape")
-        await pilot.pause()
-        assert not isinstance(app.screen, LogScreen | ContactsScreen)
-
-
-async def test_address_book_search_filters_the_table(operator):
-    from hamrlog.core.services import ContactService
-
-    for call, city in (("EA7WM", "Sevilla"), ("EA1DEF", "Bilbao"), ("DL2JKL", "Berlin")):
-        ContactService.create(call, city=city)
-
-    app = HamrlogApp()
-    async with app.run_test(size=(140, 34)) as pilot:
-        await pilot.press("alt+o")
-        await pilot.pause()
-
-        table = app.screen.query_one("#book-table")
-        assert table.row_count == 3
-        (await wait_for(pilot, app, "#book-search")).value = "bilbao"
-        await pilot.pause()
-        assert table.row_count == 1
-
-
 async def test_typing_a_known_callsign_shows_who_it_is(operator):
     from hamrlog.core.services import ContactService
 
@@ -620,34 +338,6 @@ async def test_logging_fills_the_name_from_the_address_book(operator):
         assert row.qth == "Sevilla"
 
 
-async def test_address_book_import_from_the_interface(operator, tmp_path):
-    from hamrlog.core.services import ContactService
-
-    path = tmp_path / "users.csv"
-    path.write_text(
-        "RADIO_ID,CALLSIGN,FIRST_NAME,LAST_NAME,CITY,STATE,COUNTRY,REMARKS\n"
-        "2147001,EA7WM,Manuel,Alcocer,Sevilla,Sevilla,Spain,\n"
-        "2147122,EA7ABC,Jose,Garcia,Cordoba,Cordoba,Spain,\n",
-        encoding="utf-8",
-    )
-
-    app = HamrlogApp()
-    async with app.run_test(size=(140, 34)) as pilot:
-        await pilot.press("alt+o")
-        await pilot.pause()
-        await pilot.press("ctrl+i")
-        await pilot.pause()
-
-        (await wait_for(pilot, app, "#field-path")).value = str(path)
-        await pilot.press("ctrl+s")
-        await pilot.pause()
-        # The import runs in a worker thread.
-        await pilot.pause(0.5)
-
-        assert ContactService.count() == 2
-        assert ContactService.lookup("EA7WM").first_name == "Manuel"
-
-
 async def test_malformed_callsign_is_refused_in_the_interface(operator):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
@@ -669,87 +359,37 @@ async def test_bad_callsign_is_flagged_while_typing(operator):
         assert "indicativo" in str(app.query_one("#entry-feedback").render()).lower()
 
 
-async def test_commands_open_the_right_screen(operator):
+async def test_commands_never_open_a_screen(operator):
+    """The main view is all there is: a bare command answers on the feedback line."""
     app = HamrlogApp()
     async with app.run_test(size=(140, 34)) as pilot:
-        for command in ("/agenda", "/contactos", "/listin"):
+        for command, expected in (
+            ("/ayuda", "Comandos: /banda"),
+            ("/banda", "Uso: /banda"),
+            ("/frec", "Uso: /frec"),
+            ("/modo", "Uso: /modo"),
+            ("/perfil", "Uso: /perfil"),
+            ("/repetidor", "Uso: /repetidor"),
+            ("/config", "Comando desconocido"),
+            ("/contactos", "Comando desconocido"),
+        ):
             await type_line(pilot, app, command)
-            assert isinstance(app.screen, ContactsScreen), command
-            await pilot.press("escape")
+            assert len(app.screen_stack) == 1, command
+            assert expected in str(app.query_one("#entry-feedback").render()), command
+
+
+async def test_no_shortcut_opens_a_menu(operator, station):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        assert not app.query("#menubar")
+        for key in ("alt+r", "alt+b", "alt+f", "alt+m", "alt+c", "alt+e", "alt+p",
+                    "alt+o", "alt+t", "ctrl+f1", "f12"):
+            await pilot.press(key)
             await pilot.pause()
-
-        for command in ("/registro", "/log", "/qso"):
-            await type_line(pilot, app, command)
-            assert isinstance(app.screen, LogScreen), command
-            await pilot.press("escape")
-            await pilot.pause()
+            assert len(app.screen_stack) == 1, key
 
 
-async def test_help_is_on_ctrl_f1_and_f12(operator):
-    """Alt+R belongs to the log now; help moved out of the top menu."""
-
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("ctrl+f1")
-        await pilot.pause()
-        assert isinstance(app.screen, HelpScreen)
-        await pilot.press("escape")
-        await pilot.pause()
-
-        await pilot.press("f12")
-        await pilot.pause()
-        assert isinstance(app.screen, HelpScreen)
-        await pilot.press("escape")
-        await pilot.pause()
-
-        await type_line(pilot, app, "/ayuda")
-        assert isinstance(app.screen, HelpScreen)
-
-
-async def test_menu_bar_lists_the_alt_shortcuts(operator):
-    """Each entry's letter is in its own name; F10 no longer does anything."""
-    from hamrlog.tui.widgets.menubar import SHORTCUTS, MenuBar
-
-    letters = [entry[0] for entry in SHORTCUTS]
-    assert len(set(letters)) == len(letters)
-    bound = {binding.key: binding.action for binding in HamrlogApp.BINDINGS}
-    for letter, full, short, action in SHORTCUTS:
-        assert letter.lower() in full.lower() and letter.lower() in short.lower()
-        assert bound[f"alt+{letter.lower()}"] == action
-
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        rendered = str(app.query_one(MenuBar).render())
-        assert rendered.startswith("Registro  Banda")
-        assert "Alt" not in rendered and "Menú" not in rendered
-
-        await pilot.press("f10")
-        await pilot.pause()
-        assert app.focused.id == "entry-call"
-        assert len(app.screen_stack) == 1
-
-
-async def test_mode_selector_holds_analogue_and_digital_modes(operator):
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await pilot.press("alt+m")
-        await pilot.pause()
-        options = app.screen.query_one("#choices")
-        assert options.option_count > 20
-
-        # Filtering by the group name narrows it to the digital ones.
-        (await wait_for(pilot, app, "#filter")).value = "voz digital"
-        await pilot.pause()
-        assert 0 < app.screen.query_one("#choices").option_count < 10
-
-        app.screen.query_one("#filter").value = "cw"
-        await pilot.pause()
-        await pilot.press("enter")
-        await pilot.pause()
-        assert app.state.mode == "CW"
-
-
-async def test_footer_shows_the_help_shortcut(operator):
+async def test_footer_shows_how_to_quit(operator):
     from hamrlog.tui.widgets.footer import HELP_HINT, StatsFooter
 
     app = HamrlogApp()
@@ -830,19 +470,6 @@ async def test_typing_always_logs_a_new_qso_wherever_the_cursor_is(operator):
         await type_line(pilot, app, "ea2bbb")
         assert QsoService.stats().total == 2
         assert app.query_one(HistoryPanel).on_insert_row
-
-
-async def test_enter_on_a_selected_qso_opens_the_log(operator):
-    """With nothing typed, Enter means 'work on the one I am looking at'."""
-    app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
-        await type_line(pilot, app, "ea1aaa")
-        await pilot.press("up")
-        await pilot.pause()
-
-        await pilot.press("enter")
-        await pilot.pause()
-        assert isinstance(app.screen, LogScreen)
 
 
 async def test_delete_removes_the_browsed_qso_but_still_edits_text(operator):
@@ -1007,19 +634,11 @@ async def test_repeat_uses_the_current_band_and_mode(operator):
         assert row.mode == "CW"
 
 
-async def test_e_and_d_act_on_the_browsed_qso(operator):
+async def test_d_deletes_the_browsed_qso(operator):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         await type_line(pilot, app, "ea1aaa")
         await type_line(pilot, app, "ea2bbb")
-
-        await pilot.press("up")
-        await pilot.pause()
-        await pilot.press("e")
-        await pilot.pause()
-        assert isinstance(app.screen, LogScreen)
-        await pilot.press("escape")
-        await pilot.pause()
 
         await pilot.press("up")
         await pilot.pause()
@@ -1029,6 +648,129 @@ async def test_e_and_d_act_on_the_browsed_qso(operator):
         await pilot.press("s")
         await pilot.pause()
         assert QsoService.stats().total == 1
+
+
+async def test_e_edits_the_browsed_qso_in_the_entry_line(operator):
+    """No dialog: the form comes back holding that QSO, and Enter rewrites it."""
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await type_line(pilot, app, "ea1aaa,ana")
+        await type_line(pilot, app, "ea2bbb,pepe")
+        original = QsoService.recent()[0]
+
+        await pilot.press("up", "up")
+        await pilot.pause()
+        await pilot.press("E")
+        await pilot.pause()
+
+        panel = app.query_one(EntryPanel)
+        assert len(app.screen_stack) == 1
+        assert panel.editing
+        assert panel.values()["call"] == "EA1AAA"
+        # The band is worked out by the application, so it has no box.
+        assert "band" not in panel.values()
+        assert not app.query("#entry-band")
+        assert "Editando" in str(app.query_one("#entry-hint").render())
+
+        # The arrows stay put while the form holds this row.
+        await pilot.press("down")
+        await pilot.pause()
+        assert app.query_one(HistoryPanel).selected_qso_id() == original.id
+
+        app.query_one("#entry-call").value = "ea1aab"
+        app.query_one("#entry-name").value = "anabel"
+        app.query_one("#entry-comment").value = "corregido, con coma"
+        app.query_one("#entry-freq_hz").value = "14.250"
+        app.query_one("#entry-mode").value = "cw"
+        await pilot.press("enter")
+        await pilot.pause()
+
+        row = QsoService.get(original.id)
+        assert (row.call, row.name, row.comment) == ("EA1AAB", "Anabel", "corregido, con coma")
+        assert (row.band, row.mode) == ("20m", "CW")
+        assert row.freq_hz == 14_250_000
+        assert row.qso_utc == original.qso_utc
+        assert QsoService.stats().total == 2
+
+        # Back on the action bar, same row, and the table shows the change.
+        assert not panel.editing and panel.browsing
+        history = app.query_one(HistoryPanel)
+        assert history.selected_qso_id() == original.id
+        assert history.selected_row().call == "EA1AAB"
+        assert "EA1AAB" in str(history.get_cell(str(original.id), "INDICATIVO"))
+
+
+async def test_escape_abandons_an_edit(operator):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await type_line(pilot, app, "ea1aaa,ana")
+        app.query_one("#entry-call").value = "ea9"
+
+        await pilot.press("up")
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+        app.query_one("#entry-name").value = "otra"
+        await pilot.press("escape")
+        await pilot.pause()
+
+        panel = app.query_one(EntryPanel)
+        assert not panel.editing and panel.browsing
+        assert QsoService.recent()[0].name == "Ana"
+
+        # The half-typed new QSO is still there on the way back.
+        await pilot.press("down")
+        await pilot.pause()
+        assert entry_value(app) == "ea9"
+        assert "freq_hz" not in panel.values()
+
+
+async def test_an_edit_refuses_what_it_cannot_read(operator):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await type_line(pilot, app, "ea1aaa,ana")
+        await pilot.press("up")
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+
+        app.query_one("#entry-freq_hz").value = "muchos"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert app.query_one(EntryPanel).editing
+        assert "Frecuencia no reconocida" in str(app.query_one("#entry-feedback").render())
+        assert QsoService.recent()[0].freq_hz == 7_130_000
+
+
+async def test_an_edited_frequency_outside_every_band_clears_the_band(operator):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await type_line(pilot, app, "ea1aaa,ana")
+        await pilot.press("up")
+        await pilot.pause()
+        await pilot.press("e")
+        await pilot.pause()
+
+        app.query_one("#entry-freq_hz").value = "5.000"
+        await pilot.press("enter")
+        await pilot.pause()
+        row = QsoService.recent()[0]
+        assert (row.freq_hz, row.band) == (5_000_000, "")
+        assert "fuera de las bandas" in str(app.query_one("#entry-feedback").render())
+
+
+async def test_a_name_heard_on_air_fills_a_nameless_book_entry(operator):
+    from hamrlog.core.services import ContactService
+
+    ContactService.create("EA5ZZZ", source="import")
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await type_line(pilot, app, "ea5zzz,pepe")
+        await type_line(pilot, app, "ea6yyy,marta")
+        await type_line(pilot, app, "ea6yyy,otra")
+
+    assert ContactService.lookup("EA5ZZZ").first_name == "Pepe"
+    assert ContactService.lookup("EA6YYY").first_name == "Marta"
 
 
 async def test_escape_returns_from_browsing_to_writing(operator):
@@ -1263,7 +1005,7 @@ async def test_detail_marks_a_manual_qso(operator):
 
 async def test_frequency_format_applies_across_the_interface(operator):
     from hamrlog.core import units
-    from hamrlog.tui.widgets.menubar import StatusLine
+    from hamrlog.tui.widgets.statusline import StatusLine
 
     app = HamrlogApp()
     async with app.run_test(size=(140, 30)) as pilot:
@@ -1305,58 +1047,6 @@ async def test_frequency_command_reads_the_configured_unit(operator):
         assert app.state.freq_hz == 21_300_000
 
 
-async def test_units_are_configurable_from_the_settings(operator):
-    from hamrlog.tui.screens.config import ConfigScreen
-
-    app = HamrlogApp()
-    async with app.run_test(size=(140, 34)) as pilot:
-        await pilot.press("alt+c")
-        await pilot.pause()
-        assert isinstance(app.screen, ConfigScreen)
-
-        sections = app.screen.query_one("#sections")
-        ids = [sections.get_option_at_index(i).id for i in range(sections.option_count)]
-        assert "units" in ids
-
-        sections.highlighted = ids.index("units")
-        await pilot.press("enter")
-        await pilot.pause()
-
-        (await wait_for(pilot, app, "#field-unit")).value = "k"
-        app.screen.query_one("#field-decimal").value = ","
-        app.screen.query_one("#field-thousands").value = "."
-        await pilot.press("ctrl+s")
-        await pilot.pause()
-
-        # Any spelling is stored in the SI form.
-        assert app.state.freq_unit == "kHz"
-        assert app.state.decimal_separator == ","
-        assert app.state.thousands_separator == "."
-
-
-async def test_settings_refuse_the_same_separator_twice(operator):
-
-    app = HamrlogApp()
-    async with app.run_test(size=(140, 34)) as pilot:
-        await pilot.press("alt+c")
-        await pilot.pause()
-        sections = app.screen.query_one("#sections")
-        ids = [sections.get_option_at_index(i).id for i in range(sections.option_count)]
-        sections.highlighted = ids.index("units")
-        await pilot.press("enter")
-        await pilot.pause()
-
-        (await wait_for(pilot, app, "#field-unit")).value = "M"
-        app.screen.query_one("#field-decimal").value = "."
-        app.screen.query_one("#field-thousands").value = "."
-        await pilot.press("ctrl+s")
-        await pilot.pause()
-
-        # Rejected: the settings are unchanged and the default still stands.
-        assert app.state.decimal_separator == "."
-        assert app.state.thousands_separator == ""
-
-
 async def test_frequency_format_survives_a_restart(operator):
     from hamrlog.core.services import SettingsService
 
@@ -1372,41 +1062,20 @@ async def test_frequency_format_survives_a_restart(operator):
     assert restored.frequency_format.format(7_130_000) == "7 130 kHz"
 
 
-def test_kitty_keyboard_protocol_is_off():
-    """Under kitty's protocol Konsole's Alt+P reaches the app as a plain "p"."""
-    import os
-    import subprocess
-    import sys
-
-    env = {k: v for k, v in os.environ.items() if k != "TEXTUAL_DISABLE_KITTY_KEY"}
-    result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            "import hamrlog.tui.app; from textual import constants;"
-            " print(constants.DISABLE_KITTY_KEY)",
-        ],
-        capture_output=True,
-        text=True,
-        env=env,
-        check=True,
-    )
-    assert result.stdout.strip() == "True"
-
-
-async def test_menus_are_drawn_in_the_log_area(operator, station):
-    """No floating boxes: a menu covers exactly the log, the rest stays in view."""
+async def test_dialogs_are_drawn_in_the_log_area(operator):
+    """No floating boxes: a dialog covers exactly the log, the rest stays in view."""
     app = HamrlogApp()
     async with app.run_test(size=(100, 30)) as pilot:
         frame = app.query_one("#log-frame").region
-        for keys in (("alt+p",), ("alt+e", "n"), ("alt+c",)):
-            await pilot.press(*keys)
+        await type_line(pilot, app, "ea1aaa")
+
+        for command, screen_type in (("/deshacer", ConfirmScreen), ("/modo DMR", FormScreen)):
+            await type_line(pilot, app, command)
             await pilot.pause()
+            assert isinstance(app.screen, screen_type), command
+            assert app.screen.query_one(".modal").region == frame, command
+            await pilot.press("escape")
             await pilot.pause()
-            assert app.screen.query_one(".modal").region == frame, keys
-            while len(app.screen_stack) > 1:
-                await pilot.press("escape")
-                await pilot.pause()
 
 
 def test_the_application_runs_without_the_mouse(monkeypatch):
@@ -1419,19 +1088,17 @@ def test_the_application_runs_without_the_mouse(monkeypatch):
     assert calls == {"mouse": False}
 
 
-async def test_menu_keys_replace_the_entry_help_line(operator, station):
-    """Menus carry no help text: their keys go on the line under the entry."""
+async def test_dialog_keys_replace_the_entry_help_line(operator):
+    """Dialogs carry no help text: their keys go on the line under the entry."""
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         hint = app.query_one("#entry-hint")
         entry_keys = str(hint.render())
+        await type_line(pilot, app, "ea1aaa")
 
-        await pilot.press("alt+e")
+        await type_line(pilot, app, "/deshacer")
         await pilot.pause()
-        assert "→ antenas" in str(hint.render())
-        await pilot.press("right")
-        await pilot.pause()
-        assert "A asignar antena" in str(hint.render())
+        assert "S sí" in str(hint.render())
 
         await pilot.press("escape")
         await pilot.pause()

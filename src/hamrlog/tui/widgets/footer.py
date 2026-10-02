@@ -10,9 +10,8 @@ from textual.widgets import Static
 
 from ...core.dto import LogStats
 
-#: Shown at the right edge: the help shortcut is out of the top menu, so this
-#: is where it stays discoverable.
-HELP_HINT = "Ctrl+F1 Ayuda"
+#: Shown at the right edge, so the way out is always discoverable.
+HELP_HINT = "Ctrl+Q Salir"
 
 
 class StatsFooter(Static):
@@ -51,7 +50,7 @@ class StatsFooter(Static):
                     " ".join(f"{band}:{count}" for band, count in top), style="dim yellow"
                 )
 
-        # Pad so the help hint sits flush against the right edge, dropping it
+        # Pad so the hint sits flush against the right edge, dropping it
         # entirely when the terminal is too narrow to hold both.
         width = self.size.width
         padding = width - text.cell_len - len(HELP_HINT) - 1

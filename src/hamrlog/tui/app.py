@@ -1,14 +1,12 @@
 """Main Textual application.
 
-Layout, top to bottom: shortcut menu, active configuration, history panel,
-fast entry panel, counters. Everything the operator does during a session
-happens in the entry line; the function keys only change what that line
-inherits.
+Layout, top to bottom: active configuration, history panel, fast entry
+panel, counters. Everything the operator does during a session happens in the
+entry line; ``/commands`` typed there change what a new QSO inherits.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from importlib import resources
 
 from textual import on
@@ -32,50 +30,45 @@ from ..core.services import (
 from ..core.state import SessionState
 from ..db.session import init_engine
 from .screens.base import ConfirmScreen, Field, FormScreen
-from .screens.config import DEFAULT_METRICS, METRICS_KEY, ConfigScreen
-from .screens.contacts import ContactsScreen
-from .screens.help import HelpScreen
-from .screens.log import LogScreen
-from .screens.profiles import ProfilePick, ProfileScreen
-from .screens.repeaters import DIRECT, RepeaterScreen
-from .screens.selectors import FrequencyScreen, band_screen, mode_screen
-from .screens.stations import StationPick, StationScreen
-from .screens.transfer import TransferScreen
 from .widgets.detail import DetailPanel
-from .widgets.entry import BrowseBar, EntryField, EntryPanel
+from .widgets.entry import EDIT_EXTRA_FIELDS, BrowseBar, EntryField, EntryPanel
 from .widgets.footer import StatsFooter
 from .widgets.history import HistoryPanel
-from .widgets.menubar import MenuBar, StatusLine
+from .widgets.statusline import StatusLine
 
-#: Command word -> action name, for the ``/command`` fallback to the F keys.
+#: Settings key and defaults of the Prometheus exporter.
+METRICS_KEY = "metrics"
+DEFAULT_METRICS = {"enabled": False, "port": 9119}
+
+#: Command word -> action name. Commands are the only way to change the
+#: session from the entry line.
 COMMANDS: dict[str, str] = {
     "ayuda": "help", "help": "help", "?": "help",
     "banda": "band", "band": "band",
     "frec": "frequency", "freq": "frequency", "qrg": "frequency", "frecuencia": "frequency",
     "modo": "mode", "mode": "mode", "digital": "mode",
-    "equipo": "station", "station": "station",
     "perfil": "profiles", "perfiles": "profiles", "profile": "profiles",
-    # The address book.
-    "contactos": "contacts", "contacts": "contacts",
-    "agenda": "contacts", "listin": "contacts", "listín": "contacts",
-    # The QSO log.
-    "registro": "log", "registros": "log", "log": "log", "qso": "log",
-    # Import and export.
-    "exportar": "transfer", "importar": "transfer", "export": "transfer",
-    "import": "transfer", "adif": "transfer",
     "repetidor": "repeater", "rptr": "repeater", "repeater": "repeater",
     "directo": "direct", "simplex": "direct",
-    "config": "config", "configuracion": "config", "configuración": "config",
     "deshacer": "undo", "undo": "undo", "borrar": "undo", "delete": "undo",
     "salir": "quit", "quit": "quit", "exit": "quit",
 }
 
+#: What ``/ayuda`` puts on the feedback line. Short enough for 80 columns; a
+#: command typed without its value explains itself.
+COMMAND_SUMMARY = "Comandos: /banda /frec /modo /perfil /repetidor /directo /deshacer /salir"
+
+#: Shown when a command that needs a value is typed without one.
+COMMAND_USAGE: dict[str, str] = {
+    "band": "Uso: /banda 40m",
+    "frequency": "Uso: /frec 7.100",
+    "mode": "Uso: /modo SSB",
+    "profiles": "Uso: /perfil nombre",
+    "repeater": "Uso: /repetidor INDICATIVO · /directo para volver a simplex",
+}
+
 #: How many previously typed lines the up/down keys can recall.
 LINE_HISTORY_LIMIT = 100
-
-#: Browse screens that replace one another rather than stacking.
-SWAPPABLE_SCREENS: tuple[type, ...] = (LogScreen, ContactsScreen)
-
 
 class HamrlogApp(App[None]):
     """The logbook application."""
@@ -89,19 +82,6 @@ class HamrlogApp(App[None]):
 
     # priority=True so the shortcuts work while the entry line has focus.
     BINDINGS = [
-        Binding("alt+r", "log", "Registro", priority=True),
-        Binding("alt+b", "band", "Banda", priority=True),
-        Binding("alt+f", "frequency", "Frecuencia", priority=True),
-        Binding("alt+m", "mode", "Modo", priority=True),
-        Binding("alt+c", "config", "Configuración", priority=True),
-        Binding("alt+e", "station", "Equipo", priority=True),
-        Binding("alt+p", "profiles", "Perfiles", priority=True),
-        Binding("alt+o", "contacts", "Contactos", priority=True),
-        Binding("alt+t", "repeater", "Repetidor", priority=True),
-        # Help is out of the top menu, so it lives here and in the footer.
-        # F12 is kept as a fallback: some terminals swallow Ctrl+F1.
-        Binding("ctrl+f1", "help", "Ayuda", priority=True),
-        Binding("f12", "help", "Ayuda", priority=True, show=False),
         Binding("ctrl+d", "delete_qso", "Borrar QSO", priority=True),
         Binding("escape", "back_to_entry", "Volver a escribir", show=False),
         Binding("ctrl+q", "quit", "Salir", priority=True),
@@ -117,10 +97,11 @@ class HamrlogApp(App[None]):
         #: True while the feedback line describes the selected QSO, so that
         #: leaving the selection clears it without wiping other messages.
         self._showing_selection = False
+        #: Id of the logged QSO the entry form is correcting, if any.
+        self._editing_id: int | None = None
 
     # ------------------------------------------------------------- layout --
     def compose(self) -> ComposeResult:
-        yield MenuBar(id="menubar")
         yield StatusLine(id="statusline")
         # The log and the detail of whatever is selected share one frame: they
         # are two views of the same thing, the entry form is a separate job.
@@ -209,7 +190,7 @@ class HamrlogApp(App[None]):
     def _create_first_operator(self, values: dict[str, str] | None) -> None:
         if not values or not values.get("callsign"):
             self.notify(
-                "Sin operador no se pueden registrar contactos (Alt+C).", severity="warning"
+                "Sin operador no se pueden registrar contactos.", severity="warning"
             )
             return
         try:
@@ -294,6 +275,9 @@ class HamrlogApp(App[None]):
     @on(EntryField.MoveHistory)
     def _on_move_history(self, event: EntryField.MoveHistory) -> None:
         """Arrow keys browse the log without moving the focus."""
+        if self._editing_id is not None:
+            # The form holds that row's values: moving away would orphan them.
+            return
         self.query_one(HistoryPanel).move_selection(event.delta)
 
     @on(HistoryPanel.SelectionChanged)
@@ -301,6 +285,7 @@ class HamrlogApp(App[None]):
         """Tell the operator what the arrows have landed on."""
         panel = self.query_one(EntryPanel)
         if event.qso_id is None:
+            self._editing_id = None
             panel.set_browsing(False)
             self._refresh_detail(None)
             # Only clear a message this handler put there: returning to the
@@ -324,7 +309,7 @@ class HamrlogApp(App[None]):
     @on(EntryField.Recall)
     def _on_recall(self, event: EntryField.Recall) -> None:
         """Walk previously entered QSOs with Ctrl+Up and Ctrl+Down."""
-        if not self._line_history:
+        if not self._line_history or self._editing_id is not None:
             return
         if self._history_index is None:
             self._history_index = len(self._line_history)
@@ -342,9 +327,9 @@ class HamrlogApp(App[None]):
         """Warn about a duplicate as soon as the callsign is recognisable.
 
         EntryField does not define its own Changed, so this fires for every
-        Input on screen, including the search boxes of the modal screens.
+        Input on screen, including the boxes of the form dialog.
         """
-        if not isinstance(event.input, EntryField):
+        if not isinstance(event.input, EntryField) or self._editing_id is not None:
             return
         if event.input.field_name != "call":
             return
@@ -405,6 +390,10 @@ class HamrlogApp(App[None]):
         history = self.query_one(HistoryPanel)
         values = panel.values()
 
+        if self._editing_id is not None:
+            self._save_edit(self._editing_id, values)
+            return
+
         # A command is typed in the leading box, on its own.
         first = panel.first_value
         if entry_parser.is_command(first):
@@ -414,9 +403,6 @@ class HamrlogApp(App[None]):
             return
 
         if not any(values.values()):
-            # Nothing filled in: on a logged QSO, Enter means "edit this one".
-            if not history.on_insert_row:
-                self.action_edit_selected()
             return
 
         # Anything filled in is a new QSO, wherever the cursor happens to be.
@@ -482,7 +468,13 @@ class HamrlogApp(App[None]):
             )
             return
 
-        # Commands that accept an inline argument skip their selector entirely.
+        if action == "help":
+            panel.feedback(COMMAND_SUMMARY, "info")
+            return
+        if action in COMMAND_USAGE and not command.argument:
+            panel.feedback(COMMAND_USAGE[action], "info")
+            return
+
         if command.argument:
             if action == "band":
                 self._apply_band(command.argument)
@@ -494,7 +486,7 @@ class HamrlogApp(App[None]):
                     return
                 self._apply_frequency(freq_hz)
                 return
-            if action in ("mode", "digital"):
+            if action == "mode":
                 self._apply_mode(command.argument)
                 return
             if action == "profiles":
@@ -509,43 +501,8 @@ class HamrlogApp(App[None]):
     # ------------------------------------------------------------ actions --
     @property
     def _modal_open(self) -> bool:
-        """True when a modal screen sits on top of the main one."""
+        """True when a dialog sits on top of the main screen."""
         return len(self.screen_stack) > 1
-
-    def _shortcut_busy(self, screen_type: type | None = None) -> bool:
-        """Decide whether a function key should open its screen.
-
-        The function keys have priority so they work from the entry line, but
-        that means they also fire while a modal is open. Without this guard a
-        second copy of the same screen would stack on top of the first.
-
-        Pressing the shortcut of the screen already showing closes it, which
-        is what a toggle should do.
-
-        Returns:
-            True when the caller must not open anything.
-        """
-        if screen_type is not None and isinstance(self.screen, screen_type):
-            for name in ("action_close", "action_cancel"):
-                handler = getattr(self.screen, name, None)
-                if callable(handler):
-                    handler()
-                    return True
-        return self._modal_open
-
-    def action_help(self) -> None:
-        if self._shortcut_busy(HelpScreen):
-            return
-        self.push_screen(HelpScreen())
-
-    def action_band(self) -> None:
-        if self._shortcut_busy():
-            return
-        self.push_screen(band_screen(self.state.band), self._on_band_chosen)
-
-    def _on_band_chosen(self, band_name: str | None) -> None:
-        if band_name:
-            self._apply_band(band_name)
 
     def _apply_band(self, band_name: str) -> None:
         band = bands.get(band_name)
@@ -561,15 +518,6 @@ class HamrlogApp(App[None]):
         )
         panel.focus_input()
 
-    def action_frequency(self) -> None:
-        if self._shortcut_busy(FrequencyScreen):
-            return
-        self.push_screen(FrequencyScreen(self.state.freq_hz), self._on_frequency_chosen)
-
-    def _on_frequency_chosen(self, freq_hz: int | None) -> None:
-        if freq_hz:
-            self._apply_frequency(freq_hz)
-
     def _apply_frequency(self, freq_hz: int) -> None:
         self.state.set_frequency(freq_hz)
         self.state.profile_name = ""
@@ -581,15 +529,6 @@ class HamrlogApp(App[None]):
             "ok" if self.state.band else "warning",
         )
         panel.focus_input()
-
-    def action_mode(self) -> None:
-        if self._shortcut_busy():
-            return
-        self.push_screen(mode_screen(self.state.mode), self._on_mode_chosen)
-
-    def _on_mode_chosen(self, mode_name: str | None) -> None:
-        if mode_name:
-            self._apply_mode(mode_name)
 
     def _apply_mode(self, mode_name: str) -> None:
         mode = modes.get(mode_name)
@@ -630,41 +569,6 @@ class HamrlogApp(App[None]):
         self._refresh_status()
         panel.feedback(f"Modo {self.state.mode} configurado", "ok")
         panel.focus_input()
-
-    def action_station(self) -> None:
-        if self._shortcut_busy(StationScreen):
-            return
-        self.push_screen(
-            StationScreen(self.state.station_id, self.state.antenna_id), self._on_station_chosen
-        )
-
-    def _on_station_chosen(self, pick: StationPick | None) -> None:
-        if pick is None:
-            self.query_one(EntryPanel).focus_input()
-            return
-        self.state.station_id = pick.station_id
-        self.state.antenna_id = pick.antenna_id
-        self.state.profile_name = ""
-        self._refresh_status()
-        summary = self._equipment_summary()
-        panel = self.query_one(EntryPanel)
-        panel.feedback(f"Equipo: {summary}" if summary else "Sin equipo asignado", "ok")
-        panel.focus_input()
-
-    def action_repeater(self) -> None:
-        if self._shortcut_busy(RepeaterScreen):
-            return
-        self.push_screen(RepeaterScreen(self.state), self._on_repeater_chosen)
-
-    def _on_repeater_chosen(self, repeater_id: int | None) -> None:
-        panel = self.query_one(EntryPanel)
-        if repeater_id is None:
-            panel.focus_input()
-            return
-        if repeater_id == DIRECT:
-            self.action_direct()
-            return
-        self._apply_repeater(repeater_id)
 
     def _apply_repeater(self, repeater_id: int) -> None:
         panel = self.query_one(EntryPanel)
@@ -712,42 +616,6 @@ class HamrlogApp(App[None]):
             return
         self._apply_repeater(repeater.id)
 
-    def action_profiles(self) -> None:
-        if self._shortcut_busy(ProfileScreen):
-            return
-        self.push_screen(ProfileScreen(self.state), self._on_profile_result)
-
-    def _on_profile_result(self, pick: ProfilePick | None) -> None:
-        panel = self.query_one(EntryPanel)
-        if pick is None:
-            panel.focus_input()
-            return
-        if pick.action == "load":
-            try:
-                ProfileService.apply_to_state(
-                    pick.profile_id,
-                    self.state,
-                    station_id=pick.station_id,
-                    antenna_id=pick.antenna_id,
-                )
-            except ServiceError as exc:
-                panel.feedback(str(exc), "error")
-                return
-            verb = "cargada"
-        else:
-            profile = ProfileService.get(pick.profile_id)
-            if profile is not None:
-                self.state.profile_name = profile.name
-            if pick.station_id is not None:
-                self.state.station_id = pick.station_id
-                self.state.antenna_id = pick.antenna_id
-            verb = "guardada"
-        summary = self._equipment_summary() if pick.station_id else ""
-        where = f" en {summary}" if summary else ""
-        panel.feedback(f"Configuración «{self.state.profile_name}» {verb}{where}", "ok")
-        self._refresh_status()
-        panel.focus_input()
-
     def _load_profile_by_name(self, name: str) -> None:
         """Support ``/perfil HF-Casa`` without opening the selector."""
         panel = self.query_one(EntryPanel)
@@ -760,63 +628,18 @@ class HamrlogApp(App[None]):
                 return
         panel.feedback(f"No existe la configuración «{name}»", "error")
 
-    def _open_or_swap(self, screen_type: type, factory: Callable[[], object]) -> None:
-        """Open one of the two browse screens.
-
-        The log and the address book are siblings: going from one to the
-        other is a common move, so they replace each other instead of
-        stacking. Pressing the shortcut of the screen already open closes it.
-        """
-        if isinstance(self.screen, screen_type):
-            self.screen.action_close()  # type: ignore[attr-defined]
-            return
-        if isinstance(self.screen, SWAPPABLE_SCREENS):
-            self.screen.action_close()  # type: ignore[attr-defined]
-        elif self._modal_open:
-            return
-        self.push_screen(factory(), self._on_contacts_closed)  # type: ignore[arg-type]
-
-    def action_log(self) -> None:
-        """Alt+R: the QSOs recorded."""
-        self._open_or_swap(LogScreen, lambda: LogScreen(self.state))
-
-    def action_contacts(self) -> None:
-        """Alt+O: the address book."""
-        self._open_or_swap(ContactsScreen, ContactsScreen)
-
-    def _on_contacts_closed(self, changed: bool | None) -> None:
-        if changed:
-            self._reload_history()
-            self._refresh_stats()
-        self.query_one(EntryPanel).focus_input()
-
-    def action_transfer(self) -> None:
-        if self._shortcut_busy(TransferScreen):
-            return
-        self.push_screen(TransferScreen(self.state), self._on_contacts_closed)
-
     def action_back_to_entry(self) -> None:
-        """Escape leaves the log and returns to the insert row."""
+        """Escape leaves the log and returns to the insert row.
+
+        While editing it only abandons the edit, staying on that QSO.
+        """
         if self._modal_open:
             return
+        if self._editing_id is not None:
+            self._end_edit()
+            self.query_one(EntryPanel).feedback("Edición cancelada.", "info")
+            return
         self.query_one(HistoryPanel).go_to_insert_row()
-
-    def action_edit_selected(self) -> None:
-        """Edit the QSO under the history cursor, from the main screen."""
-        row = self.query_one(HistoryPanel).selected_row()
-        if row is None:
-            return
-        self.push_screen(LogScreen(self.state), self._on_contacts_closed)
-
-    def action_config(self) -> None:
-        if self._shortcut_busy(ConfigScreen):
-            return
-        self.push_screen(ConfigScreen(self.state), self._on_config_closed)
-
-    def _on_config_closed(self, changed: bool | None) -> None:
-        if changed:
-            self._refresh_status()
-        self.query_one(EntryPanel).focus_input()
 
     @on(BrowseBar.Action)
     def _on_browse_action(self, event: BrowseBar.Action) -> None:
@@ -828,7 +651,7 @@ class HamrlogApp(App[None]):
         if event.action == "delete":
             self._confirm_delete(row.id)
         elif event.action == "edit":
-            self.action_edit_selected()
+            self._begin_edit(row)
         elif event.action == "repeat":
             self._repeat_qso(row)
 
@@ -840,6 +663,114 @@ class HamrlogApp(App[None]):
             "↓ hasta «<Insertar nuevo>» para escribir",
             "warning",
         )
+
+    def _begin_edit(self, row) -> None:  # type: ignore[no-untyped-def]
+        """Load the browsed QSO into the entry form to correct it in place.
+
+        Everything the form shows can change; the timestamp is not in it.
+        """
+        panel = self.query_one(EntryPanel)
+        order = self.state.field_order + tuple(
+            name for name in EDIT_EXTRA_FIELDS if name not in self.state.field_order
+        )
+        values = entry_parser.values_from_row(row, order)
+        for key in entry_parser.DIGITAL_KEYS:
+            if key in values:
+                values[key] = str((row.digital_data or {}).get(key, ""))
+        self._editing_id = row.id
+        self._showing_selection = False
+        panel.start_edit(values)
+        panel.feedback(f"Editando el QSO con {row.call} de las {row.qso_utc:%H:%M:%S} UTC", "info")
+
+    def _end_edit(self) -> None:
+        self._editing_id = None
+        self.query_one(EntryPanel).stop_edit()
+
+    def _save_edit(self, qso_id: int, values: dict[str, str]) -> None:
+        """Validate the form and write it over the QSO being edited."""
+        panel = self.query_one(EntryPanel)
+        row = QsoService.get(qso_id)
+        if row is None:
+            self._end_edit()
+            panel.feedback("Ese QSO ya no existe.", "warning")
+            return
+
+        parsed = entry_parser.from_fields(
+            values,
+            mode_name=values.get("mode") or row.mode,
+            validation=self.state.callsign_validation,
+        )
+        if not parsed.ok:
+            panel.feedback(parsed.error or "Entrada no válida.", "error")
+            return
+        # The parser drops a value it cannot read and warns; saving then would
+        # silently blank a field the operator meant to change.
+        unreadable = [
+            name for name in ("freq_hz", "mode", "power_w")
+            if values.get(name) and name not in parsed.fields
+        ]
+        if unreadable:
+            panel.feedback(" ".join(parsed.warnings), "error")
+            return
+
+        changes: dict[str, object] = {}
+        for name in values:
+            # The band is never typed here, even when the entry line has a box
+            # for it: it is worked out from the frequency below.
+            if name in entry_parser.DIGITAL_KEYS or name == "band":
+                continue
+            empty = None if name in ("freq_hz", "power_w") else ""
+            changes[name] = parsed.fields.get(name, empty)
+
+        warnings = list(parsed.warnings)
+        new_freq = changes.get("freq_hz", row.freq_hz)
+        moved = new_freq != row.freq_hz
+        if moved and new_freq:
+            found = bands.from_frequency(int(new_freq))  # type: ignore[call-overload]
+            changes["band"] = found.name if found else ""
+            if found is None:
+                warnings.append("Frecuencia fuera de las bandas de radioaficionado.")
+        if moved and row.repeater_call:
+            # The repeater no longer describes where this QSO took place.
+            changes.update(freq_tx_hz=None, repeater_id=None, repeater_call="")
+
+        digital_keys = [name for name in values if name in entry_parser.DIGITAL_KEYS]
+        if digital_keys:
+            digital = dict(row.digital_data or {})
+            for key in digital_keys:
+                if values[key]:
+                    digital[key] = values[key]
+                else:
+                    digital.pop(key, None)
+            changes["digital_data"] = digital
+
+        changes = {
+            key: value
+            for key, value in changes.items()
+            if key == "repeater_id" or getattr(row, key, None) != value
+        }
+        if not set(changes) - {"repeater_id"}:
+            self._end_edit()
+            panel.feedback("Sin cambios.", "info")
+            return
+
+        try:
+            updated = QsoService.update(qso_id, changes)
+        except ServiceError as exc:
+            panel.feedback(str(exc), "error")
+            return
+
+        self._end_edit()
+        self.query_one(HistoryPanel).replace_row(updated)
+        self._refresh_detail(updated)
+        self._refresh_stats()
+        message = f"✓ {updated.call} modificado"
+        if moved and updated.band:
+            message += f" · banda {updated.band}"
+        if warnings:
+            panel.feedback(f"{message}   ⚠ {' '.join(warnings)}", "warning")
+        else:
+            panel.feedback(message, "ok")
 
     def _repeat_qso(self, row) -> None:  # type: ignore[no-untyped-def]
         """Load a logged QSO back into the entry line as a new one.
@@ -865,12 +796,9 @@ class HamrlogApp(App[None]):
 
         The binding needs priority because Input already uses Ctrl+D to delete
         forwards, which would otherwise swallow it. That means it also fires
-        over an open modal, so the key is handed to that screen's own delete.
+        over an open dialog, where it does nothing.
         """
         if self._modal_open:
-            handler = getattr(self.screen, "action_remove", None)
-            if callable(handler):
-                handler()
             return
         history = self.query_one(HistoryPanel)
         qso_id = history.selected_qso_id()

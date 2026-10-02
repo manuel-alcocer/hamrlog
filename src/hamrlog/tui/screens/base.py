@@ -1,9 +1,4 @@
-"""Reusable modal screens.
-
-Most shortcuts boil down to "pick one thing from a list" or "fill in a few
-fields", so those two shapes are implemented once here and parameterised by
-the callers.
-"""
+"""The two dialogs the main screen still needs: a confirmation and a form."""
 
 from __future__ import annotations
 
@@ -15,15 +10,14 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, ScreenResultType
-from textual.widgets import Button, Input, Label, OptionList, Static
-from textual.widgets.option_list import Option
+from textual.widgets import Button, Input, Label, Static
 
 
 class PanelScreen(ModalScreen[ScreenResultType]):
-    """A menu drawn in the main panel instead of a floating box.
+    """A dialog drawn in the main panel instead of a floating box.
 
     It covers exactly the area of the log (``#log-frame``) and leaves the
-    menu bar, the status line, the entry line and the footer in view, so the
+    status line, the entry line and the footer in view, so the
     application never looks like it stacked a dialog on top of itself. It is
     still a screen underneath, so it takes the keyboard and Escape goes back.
 
@@ -101,111 +95,6 @@ def _show_keys(app: Any, keys: str | None) -> None:
 def _restore_keys(app: Any) -> None:
     top = app.screen
     _show_keys(app, top._keys if isinstance(top, PanelScreen) else None)
-
-
-@dataclass(frozen=True, slots=True)
-class Choice:
-    """One selectable entry of a SelectionScreen."""
-
-    value: Any
-    label: str
-    detail: str = ""
-    #: Extra words matched by the filter but not shown, e.g. a group name.
-    search_extra: str = ""
-
-    @property
-    def search_text(self) -> str:
-        return f"{self.label} {self.detail} {self.search_extra}".lower()
-
-
-class SelectionScreen(PanelScreen[Any]):
-    """Filterable list; dismisses with the chosen value or None."""
-
-    BINDINGS = [
-        Binding("escape", "cancel", "Cancelar"),
-        Binding("down", "focus_list", "Bajar", show=False),
-    ]
-
-    def __init__(
-        self,
-        title: str,
-        choices: list[Choice],
-        *,
-        subtitle: str = "",
-        current: Any = None,
-        allow_filter: bool = True,
-    ) -> None:
-        super().__init__()
-        self.title_text = title
-        self.subtitle_text = subtitle
-        self.choices = choices
-        self.current = current
-        self.allow_filter = allow_filter
-        self._visible: list[Choice] = list(choices)
-
-    def compose(self) -> ComposeResult:
-        with Vertical(classes="modal"):
-            yield Label(self.title_text, classes="modal-title")
-            if self.subtitle_text:
-                yield Static(self.subtitle_text, classes="modal-subtitle")
-            if self.allow_filter:
-                yield Input(placeholder="Escribe para filtrar...", id="filter")
-            yield OptionList(id="choices")
-            yield Static(
-                "Enter selecciona · ↑↓ navega · Esc cancela", classes="modal-help"
-            )
-
-    def on_mount(self) -> None:
-        self._refresh_options()
-        if self.allow_filter:
-            self.query_one("#filter", Input).focus()
-        else:
-            self.query_one("#choices", OptionList).focus()
-
-    def _refresh_options(self, needle: str = "") -> None:
-        """Rebuild the option list, applying the current filter."""
-        option_list = self.query_one("#choices", OptionList)
-        option_list.clear_options()
-
-        needle = needle.strip().lower()
-        self._visible = [c for c in self.choices if not needle or needle in c.search_text]
-
-        highlighted = 0
-        for index, choice in enumerate(self._visible):
-            marker = "● " if choice.value == self.current else "  "
-            prompt = f"{marker}{choice.label}"
-            if choice.detail:
-                prompt = f"{prompt}   [dim]{choice.detail}[/dim]"
-            option_list.add_option(Option(prompt, id=str(index)))
-            if choice.value == self.current:
-                highlighted = index
-
-        if self._visible:
-            option_list.highlighted = highlighted
-
-    @on(Input.Changed, "#filter")
-    def _on_filter_changed(self, event: Input.Changed) -> None:
-        self._refresh_options(event.value)
-
-    @on(Input.Submitted, "#filter")
-    def _on_filter_submitted(self) -> None:
-        """Enter in the filter box picks the first (or highlighted) match."""
-        option_list = self.query_one("#choices", OptionList)
-        index = option_list.highlighted if option_list.highlighted is not None else 0
-        if 0 <= index < len(self._visible):
-            self.dismiss(self._visible[index].value)
-
-    @on(OptionList.OptionSelected, "#choices")
-    def _on_option_selected(self, event: OptionList.OptionSelected) -> None:
-        index = int(event.option.id) if event.option.id is not None else -1
-        if 0 <= index < len(self._visible):
-            self.dismiss(self._visible[index].value)
-
-    def action_focus_list(self) -> None:
-        self.query_one("#choices", OptionList).focus()
-
-    def action_cancel(self) -> None:
-        self.dismiss(None)
 
 
 class ConfirmScreen(PanelScreen[bool]):

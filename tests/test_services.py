@@ -49,16 +49,19 @@ def test_manual_timestamp_marks_the_contact_as_manual(state):
     assert row.qso_utc == dt.datetime(2026, 1, 15, 12, 30)
 
 
-def test_automatic_contact_only_allows_the_callsign_to_change(state):
+def test_automatic_contact_allows_everything_but_the_timestamp(state):
     row = log_line("ea4abc,juan", state)
-    assert QsoService.editable_fields(row.id) == frozenset({"call"})
+    assert "qso_utc" not in QsoService.editable_fields(row.id)
 
-    updated = QsoService.update(row.id, {"call": "ea4abc/p"})
-    assert updated.call == "EA4ABC/P"
+    updated = QsoService.update(
+        row.id, {"call": "ea4abc/p", "name": "Otro", "qth": "X", "freq_hz": 14_250_000}
+    )
+    assert (updated.call, updated.name, updated.qth) == ("EA4ABC/P", "Otro", "X")
+    assert updated.band == "20m"
+    assert updated.qso_utc == row.qso_utc
 
-    for forbidden in ({"name": "Otro"}, {"qth": "X"}, {"qso_utc": dt.datetime(2020, 1, 1)}):
-        with pytest.raises(ServiceError, match="automático"):
-            QsoService.update(row.id, forbidden)
+    with pytest.raises(ServiceError, match="automático"):
+        QsoService.update(row.id, {"qso_utc": dt.datetime(2020, 1, 1)})
 
 
 def test_manual_contact_allows_every_field(state):

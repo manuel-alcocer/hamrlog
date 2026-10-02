@@ -191,11 +191,19 @@ class HistoryPanel(DataTable):
         self.add_row(*cells, key=INSERT_ROW_KEY)
 
     def _append(self, row: QsoRow) -> None:
+        self.add_row(*self._cells(row), key=str(row.id))
+
+    def replace_row(self, row: QsoRow) -> None:
+        """Redraw one QSO after an edit, leaving the cursor where it is."""
+        self._rows = [row if known.id == row.id else known for known in self._rows]
+        for (label, _), cell in zip(COLUMNS, self._cells(row), strict=True):
+            self.update_cell(str(row.id), label, cell)
+
+    def _cells(self, row: QsoRow) -> list[Text]:
         marker = Text("M ", style="bold yellow") if row.is_manual else Text("")
-        call = marker + Text(row.call, style="bold")
-        self.add_row(
+        return [
             Text(row.qso_utc.strftime("%Y-%m-%d %H:%M:%S")),
-            call,
+            marker + Text(row.call, style="bold"),
             Text(row.name or "-"),
             Text(row.band or "-", style="yellow"),
             Text(bands.format_frequency(row.freq_hz, with_unit=False)),
@@ -203,8 +211,7 @@ class HistoryPanel(DataTable):
             Text(f"{row.rst_sent}/{row.rst_rcvd}".strip("/") or "-"),
             Text(row.country or "-", style="dim"),
             Text(self._notes(row), style="dim"),
-            key=str(row.id),
-        )
+        ]
 
     @staticmethod
     def _notes(row: QsoRow) -> str:

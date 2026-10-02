@@ -1,1 +1,1 @@
-"""Modal screens reached from the function key shortcuts."""
+"""Dialogs drawn over the log panel."""

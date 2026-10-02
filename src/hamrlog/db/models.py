@@ -87,7 +87,7 @@ station_type_links = Table(
     Column("type_id", ForeignKey("station_types.id", ondelete="CASCADE"), primary_key=True),
 )
 
-#: Configurations offered under each station in Alt+P. Assigned by hand, so
+#: Configurations offered under each station. Assigned by hand, so
 #: two stations with the same rig can offer different configurations, and one
 #: configuration can be reused by several stations.
 station_profile_links = Table(
@@ -111,7 +111,7 @@ station_antenna_links = Table(
 class Antenna(Base):
     """An antenna and the amateur bands it works on.
 
-    Stations list the antennas they can use, and in Alt+P an antenna only
+    Stations list the antennas they can use, and an antenna only
     offers the configurations on one of its bands.
     """
 
@@ -166,7 +166,7 @@ class StationType(Base):
 
 
 class Station(Base):
-    """A rig, selected with Alt+E together with one of its antennas."""
+    """A rig, used together with one of its antennas."""
 
     __tablename__ = "stations"
 
@@ -315,10 +315,10 @@ class Repeater(Base):
 
 
 class Profile(Base):
-    """A saved snapshot of the working configuration, recalled with Alt+P.
+    """A saved snapshot of the working configuration, recalled with /perfil.
 
     Shown to the operator as a «configuración». It is not tied to one station:
-    stations list the configurations assigned to them, and Alt+P loads the
+    stations list the configurations assigned to them, and loading one applies the
     pair.
     """
 

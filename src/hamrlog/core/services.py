@@ -34,9 +34,6 @@ from . import callsign as callsign_module
 from .dto import ContactRow, LogStats, QsoRow
 from .state import SessionState
 
-#: Fields an automatically timestamped QSO still allows editing.
-AUTO_EDITABLE_FIELDS: frozenset[str] = frozenset({"call"})
-
 #: Fields a manually dated QSO allows editing.
 MANUAL_EDITABLE_FIELDS: frozenset[str] = frozenset(
     {
@@ -45,6 +42,10 @@ MANUAL_EDITABLE_FIELDS: frozenset[str] = frozenset(
         "operator_id", "digital_data", "repeater_id", "repeater_call",
     }
 )
+
+#: Fields an automatically timestamped QSO allows editing: everything but the
+#: timestamp, which the program set and is the evidence of when it happened.
+AUTO_EDITABLE_FIELDS: frozenset[str] = MANUAL_EDITABLE_FIELDS - {"qso_utc"}
 
 
 class ServiceError(Exception):
@@ -127,7 +128,7 @@ class OperatorService:
 # --------------------------------------------------------------------------- #
 
 class StationService:
-    """Rigs, each with the antennas it can use, selected with Alt+E."""
+    """Rigs, each with the antennas it can use."""
 
     @staticmethod
     def _query():  # type: ignore[no-untyped-def]
@@ -308,7 +309,7 @@ class StationTypeService:
             type_id = known.get(name.lower())
             if type_id is None:
                 raise ServiceError(
-                    f"No existe el tipo «{name}». Se crean en Alt+C → Tipos de equipo."
+                    f"No existe el tipo «{name}»."
                 )
             if type_id not in ids:
                 ids.append(type_id)
@@ -426,7 +427,7 @@ def _type_named(session: Any, name: str) -> StationType | None:
 # --------------------------------------------------------------------------- #
 
 class RepeaterService:
-    """Repeaters the operator works through, selected with Alt+T."""
+    """Repeaters the operator works through."""
 
     @staticmethod
     def list_all(include_inactive: bool = False) -> list[Repeater]:
@@ -578,7 +579,7 @@ class RepeaterService:
 # --------------------------------------------------------------------------- #
 
 class ProfileService:
-    """Saved configurations, assigned to stations and recalled with Alt+P.
+    """Saved configurations, assigned to stations and recalled with /perfil.
 
     The operator calls them «configuraciones»; the name ``Profile`` predates
     the split between stations and what is tuned on them.
@@ -904,20 +905,26 @@ def _fill_from_address_book(fields: dict[str, Any], call: str) -> None:
 def _remember_in_address_book(row: QsoRow) -> None:
     """Add a station to the address book the first time it is worked.
 
-    Only ever creates: an entry already there is left exactly as it is, since
-    what the operator typed into it is worth more than what a single QSO
-    happens to carry. The entry is filed under the home callsign, so working
-    the same person portable does not produce a second one.
+    An entry already there keeps what it has, since what the operator typed
+    into it is worth more than what a single QSO happens to carry; the one
+    exception is an entry with no name at all, which takes the name heard on
+    air. The entry is filed under the home callsign, so working the same
+    person portable does not produce a second one.
 
     A failure here must never cost the operator the QSO, so it is swallowed.
     """
     base = callsign_module.base_call(row.call)
     if not base:
         return
+    first_name, _, last_name = row.name.partition(" ")
     try:
-        if ContactService.lookup(base) is not None:
+        known = ContactService.lookup(base)
+        if known is not None:
+            if row.name and not (known.first_name or known.last_name):
+                ContactService.update(
+                    known.id, first_name=first_name, last_name=last_name.strip()
+                )
             return
-        first_name, _, last_name = row.name.partition(" ")
         ContactService.create(
             base,
             first_name=first_name,
@@ -956,7 +963,7 @@ class QsoService:
             The stored contact as a QsoRow.
         """
         if state.operator_id is None:
-            raise ServiceError("No hay operador seleccionado. Configúralo con Alt+C.")
+            raise ServiceError("No hay operador seleccionado.")
 
         call_raw = str(fields.get("call", "")).strip()
         if not call_raw:
@@ -1121,8 +1128,8 @@ class QsoService:
         """Apply changes, enforcing the automatic/manual edit rules.
 
         A QSO logged with the automatic clock is evidence of when the contact
-        happened, so only the callsign may be corrected. A manually dated one
-        was typed from paper and stays fully editable.
+        happened, so its timestamp cannot be changed; everything else can. A
+        manually dated one was typed from paper and stays fully editable.
         """
         with session_scope() as session:
             qso = session.get(Qso, qso_id)
@@ -1133,7 +1140,7 @@ class QsoService:
             rejected = sorted(set(changes) - allowed)
             if rejected:
                 raise ServiceError(
-                    "Este QSO es automático: solo se puede modificar el indicativo. "
+                    "Este QSO es automático: la fecha y la hora no se pueden modificar. "
                     f"Campos rechazados: {', '.join(rejected)}."
                 )
 

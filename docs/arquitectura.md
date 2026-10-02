@@ -25,8 +25,8 @@ hamrlog/
 │   ├── migrations.py   Añade columnas y tablas que falten al abrir
 │   └── session.py      Motor, sesiones y esquema
 ├── adif/           Lectura y escritura del formato ADIF 3.1
-├── tui/            Interfaz Textual (widgets y pantallas)
-│   ├── screens/        log.py = registro de QSO, contacts.py = agenda
+├── tui/            Interfaz Textual: una sola pantalla
+│   ├── screens/        base.py = los dos diálogos (confirmación y formulario)
 │   └── widgets/        detail.py = detalle de lo señalado en el histórico
 ├── api/            Métricas Prometheus y API REST opcional
 └── cli.py          Punto de entrada y subcomandos
@@ -47,8 +47,9 @@ escribir hace que SQLite y PostgreSQL se comporten igual. La interfaz muestra
 UTC siempre, que es lo que va al log y a cualquier exportación.
 
 **`entry_mode` (AUTO/MANUAL) en el modelo.** No es un detalle de presentación:
-determina qué campos se pueden editar. La regla se aplica en el servicio, no en
-la pantalla, para que una API futura no pueda saltársela.
+un QSO automático no admite cambiar su fecha y hora, que puso el programa; uno
+manual, sí. La regla se aplica en el servicio, no en la pantalla, para que una
+API futura no pueda saltársela.
 
 **Los informes (RST) son texto.** Los modos digitales usan decibelios (`-12`),
 no la escala RST clásica.
@@ -104,22 +105,23 @@ trampa, así que escribir queda desactivado mientras el cursor está sobre un
 registro y una tecla desconocida explica dónde estás en lugar de no hacer nada.
 El borrador a medio escribir se guarda al entrar y se restaura al salir.
 
-**Registro y agenda son pantallas separadas.** Empezaron como dos pestañas de
-una misma pantalla y se demostró confuso: en radioafición «contactos» es la
-gente, no los QSO. Ahora `Alt+R` es el registro (`tui/screens/log.py`) y `Alt+O` la
-agenda (`tui/screens/contacts.py`), y se sustituyen la una a la otra en vez de
-apilarse.
+**Una sola pantalla, sin menús.** Hubo nueve pantallas de gestión (registro,
+selectores de banda, frecuencia y modo, configuración, equipo, perfiles,
+agenda y repetidores) tras una barra de atajos `Alt`+letra. La vista principal
+funcionaba y ellas no convencían, así que se retiraron enteras para
+rediseñarlas: `tui/` es ahora la pantalla principal más dos diálogos
+(`ConfirmScreen` y `FormScreen`), y la sesión se cambia con comandos `/` en la
+línea de entrada. Los servicios que esas pantallas usaban siguen intactos en
+`core/services.py`; lo que falta es solo la presentación.
 
-**Un solo selector de modo.** Analógicos y digitales estaban en `F4` y `F5`,
-una distinción que le importa al programa y no al operador, que solo piensa en
-«modo». Ahora `Alt+M` los lista todos con el grupo buscable en el filtro.
-
-**Atajos con Alt en vez de teclas de función.** Varios emuladores de terminal
-se quedan con las F (`F10` sobre todo), y para eso existía un menú navegable
-con cursores que en la práctica no usaba nadie. Ahora cada pantalla es
-`Alt` más una letra de su nombre, resaltada en la barra (`Alt+R` Registro,
-`Alt+O` cOntactos, `Alt+T` rpTr cuando la inicial ya estaba cogida), y el menú
-navegable desapareció.
+**Se edita en la línea de entrada, no en un formulario aparte.** `E` sobre un
+QSO rellena las mismas casillas con las que se registró, más una segunda fila
+(`#entry-extra`) con frecuencia y modo, que un QSO nuevo hereda de la
+sesión y por eso no tienen casilla. La banda no se ofrece: es un valor
+calculado a partir de la frecuencia, y dejar escribir las dos permitiría que
+se contradijeran. Mientras dura, las flechas no mueven el
+cursor: el formulario pertenece a esa fila. La tabla se redibuja celda a celda
+(`HistoryPanel.replace_row`) para no perder la posición.
 
 **La agenda no tiene claves ajenas al log.** Un listín de usuarios DMR son
 decenas de miles de filas que llegan de golpe y se reemplazan enteras; atarlas
@@ -136,8 +138,10 @@ indicativo con forma válida: lo contrario llenaría la agenda de basura.
 **La importación nunca pisa lo escrito a mano.** Solo rellena campos vacíos.
 Un nombre anotado durante un QSO vale más que el de una lista descargada.
 
-**El alta automática solo crea, nunca actualiza.** Registrar un indicativo
-desconocido añade su ficha; si ya existe, se deja intacta. Actualizarla con cada
+**El alta automática crea y, como mucho, pone nombre.** Registrar un indicativo
+desconocido añade su ficha; si ya existe, se deja intacta, salvo que no tenga
+nombre: entonces toma el del QSO, porque una ficha sin nombre no dice nada que
+proteger. Actualizarla con cada
 QSO convertiría la agenda en un reflejo del último contacto en lugar de en lo
 que el operador sabe de esa persona. Vive en `QsoService.log`, no en la
 interfaz, para que una API futura se comporte igual, y captura sus errores: un
@@ -164,7 +168,7 @@ a la conversión `_to_row` de `services.py` y al exportador ADIF. Sube
 
 **Un modo nuevo.** Una entrada en la tupla correspondiente de `core/modes.py`,
 con su `adif_mode` y su `adif_submode`. Si necesita datos propios, añádelos en
-`digital_fields`: las preguntas tras elegir el modo se generan solas a partir de esa definición.
+`digital_fields`: las preguntas tras `/modo` se generan solas a partir de esa definición.
 
 **Un formato de listín nuevo.** Añade sus encabezados a `HEADER_ALIASES` en
 `core/contacts.py`; si es para escribir, una rama en `_rows_for` y una entrada

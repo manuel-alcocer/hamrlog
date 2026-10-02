@@ -1,18 +1,11 @@
 /* hamrlog layout.
-   Vertical stack: menu, status, history (flexible), entry, counters.
+   Vertical stack: status, history (flexible), entry, counters.
    The history panel is the only widget that grows, so the entry line always
    stays at the same place on screen no matter the terminal size. */
 
 Screen {
     layout: vertical;
     background: $surface;
-}
-
-#menubar {
-    height: 1;
-    background: $panel;
-    color: $text;
-    padding: 0 1;
 }
 
 /* Exactly one row: a border here would consume the only line available,
@@ -80,6 +73,12 @@ Screen {
     width: 100%;
 }
 
+/* Frequency and mode, shown only while editing a logged QSO. */
+#entry-extra {
+    height: 1;
+    width: 100%;
+}
+
 .entry-label {
     height: 1;
     padding: 0 1 0 1;
@@ -121,7 +120,7 @@ Screen {
 
 /* ----------------------------------------------------------- panels ---- */
 
-/* Menus are drawn in place of the log (see PanelScreen), framed like it, so
+/* Dialogs are drawn in place of the log (see PanelScreen), framed like it, so
    they read as another view of the main panel rather than a floating box.
    Size and position are set in code; the widths below only matter until
    then. */
@@ -162,13 +161,6 @@ PanelScreen {
     padding-top: 1;
 }
 
-.modal-preview {
-    width: 100%;
-    height: auto;
-    min-height: 1;
-    padding: 1 0 0 0;
-}
-
 .modal-buttons {
     height: auto;
     width: 100%;
@@ -182,14 +174,6 @@ PanelScreen {
     border: none;
     height: 1;
     min-width: 14;
-}
-
-/* Lists take the height the panel has, like the log they replace, and have
-   no frame of their own. */
-.modal OptionList {
-    height: 1fr;
-    border: none;
-    background: $surface;
 }
 
 /* Text boxes look like the entry line's: one row, told apart by colour. */
@@ -238,85 +222,4 @@ PanelScreen {
     width: 100%;
     height: auto;
     color: $error;
-}
-
-/* --------------------------------------------------------- contacts ---- */
-
-.search-row {
-    height: 1;
-    width: 100%;
-    margin-bottom: 1;
-}
-
-.search-row Input {
-    width: 1fr;
-}
-
-.search-count {
-    width: 18;
-    padding: 0 1;
-    color: $text-muted;
-    text-align: right;
-}
-
-#log-table {
-    height: 1fr;
-    min-height: 10;
-}
-
-.help-body {
-    height: 1fr;
-    padding: 0 1;
-}
-
-/* ----------------------------------------------------- address book ---- */
-
-#tabs {
-    height: 1fr;
-}
-
-#tabs TabPane {
-    padding: 0;
-}
-
-#book-table {
-    height: 1fr;
-    min-height: 8;
-}
-
-#book-result {
-    height: auto;
-    max-height: 4;
-}
-
-.columns {
-    height: 1fr;
-}
-
-.column {
-    width: 1fr;
-    height: 1fr;
-}
-
-/* Headed like the log's columns. */
-.column-title {
-    width: 100%;
-    background: $panel;
-    text-style: bold;
-    /* Lined up with the names below, past the list's "● " marker. */
-    padding: 0 3;
-    text-wrap: nowrap;
-    text-overflow: ellipsis;
-}
-
-/* The only separation between columns: a vertical line. */
-.column-ruled {
-    border-left: solid $primary-darken-2;
-}
-
-.column OptionList {
-    height: 1fr;
-    /* Columns share the width: a wrapped entry would read as two. */
-    text-wrap: nowrap;
-    text-overflow: ellipsis;
 }

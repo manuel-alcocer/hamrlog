@@ -8,6 +8,9 @@ which value goes where instead of counting separators.
 The panel has two states. On the insert row it is this form. On a logged QSO
 it becomes a bar of actions (delete, edit, repeat), because the arrows have
 turned the screen into a log browser and letters would otherwise be ambiguous.
+Editing brings the form back, filled with that QSO, plus a second row for the
+frequency and mode the entry line normally inherits from the session. The band
+has no box: it follows from the frequency.
 """
 
 from __future__ import annotations
@@ -28,6 +31,13 @@ BROWSE_ACTIONS: dict[str, str] = {"d": "delete", "e": "edit", "r": "repeat"}
 
 #: What the entry line offers while the cursor sits on a logged QSO.
 BROWSE_PROMPT = "D suprimir · E editar · R repetir · ↓ volver a escribir"
+
+#: Offered on a second row while editing, unless the entry line has them.
+#: The band is not among them: the application works it out from the frequency.
+EDIT_EXTRA_FIELDS: tuple[str, ...] = ("freq_hz", "mode")
+
+#: Help line while a logged QSO is being edited.
+EDIT_KEYS = "Editando · Enter guarda · Esc cancela · la fecha y la hora no cambian"
 
 #: Short label and box width per field. Width None means "take what is left",
 #: so the free-text field grows with the terminal.
@@ -100,7 +110,6 @@ class BrowseBar(Static, can_focus=True):
         Binding("page_up", "move_history(-10)", "Subir 10", show=False),
         Binding("page_down", "move_history(10)", "Bajar 10", show=False),
         # This bar holds the keyboard while browsing, so it owns these too.
-        Binding("enter", "run('edit')", "Editar", show=False),
         Binding("delete", "run('delete')", "Suprimir", show=False),
     ]
 
@@ -153,7 +162,9 @@ class EntryPanel(Vertical):
         #: Values put aside while browsing, so it never costs a half-typed QSO.
         self._draft: dict[str, str] = {}
         self._browsing = False
-        #: Keys of the menu open in the main panel, shown on the help line.
+        #: True while the form holds a logged QSO being corrected.
+        self._editing = False
+        #: Keys of the dialog open in the main panel, shown on the help line.
         self._menu_keys = ""
         #: Pending rebuild of the field boxes, awaited by ``ready()`` so the
         #: caller can focus them without racing the layout.
@@ -161,21 +172,35 @@ class EntryPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Horizontal(id="entry-fields")
+        yield Horizontal(id="entry-extra")
         yield BrowseBar(id="entry-browse")
         yield Static("", id="entry-hint")
         yield Static("", id="entry-feedback")
 
     def on_mount(self) -> None:
         self.query_one("#entry-browse", BrowseBar).display = False
+        self.query_one("#entry-extra", Horizontal).display = False
 
     # -------------------------------------------------------------- fields --
     @property
     def fields(self) -> list[EntryField]:
-        return list(self.query(EntryField))
+        """The boxes in use: the second row only counts while editing.
+
+        A new QSO takes its frequency and mode from the session.
+        """
+        return [
+            box
+            for box in self.query(EntryField)
+            if self._editing or not box.has_class("entry-extra-field")
+        ]
 
     @property
     def browsing(self) -> bool:
         return self._browsing
+
+    @property
+    def editing(self) -> bool:
+        return self._editing
 
     def build_fields(self, field_order: tuple[str, ...]) -> None:
         """Lay out one box per field of the active profile.
@@ -194,20 +219,34 @@ class EntryPanel(Vertical):
         """Replace the boxes with one per field, in order.
 
         Deliberately does not grab the focus: this runs on every status
-        refresh, and stealing the keyboard from a menu or a modal would be a
-        bug. The application focuses the form when it means to.
+        refresh, and stealing the keyboard from a dialog would be a bug. The
+        application focuses the form when it means to.
         """
         row = self.query_one("#entry-fields", Horizontal)
+        extra = self.query_one("#entry-extra", Horizontal)
         await row.remove_children()
+        await extra.remove_children()
 
+        await row.mount_all(self._boxes(field_order))
+        await extra.mount_all(
+            self._boxes(
+                tuple(name for name in EDIT_EXTRA_FIELDS if name not in field_order),
+                classes="entry-field entry-extra-field",
+            )
+        )
+
+    @staticmethod
+    def _boxes(
+        names: tuple[str, ...], classes: str = "entry-field"
+    ) -> list[Label | EntryField]:
         widgets: list[Label | EntryField] = []
-        for name in field_order:
+        for name in names:
             label, width = FIELD_LAYOUT.get(name, DEFAULT_LAYOUT)
-            box = EntryField(name, id=f"entry-{name}", classes="entry-field")
+            box = EntryField(name, id=f"entry-{name}", classes=classes)
             box.styles.width = width if width is not None else "1fr"
             widgets.append(Label(label, classes="entry-label"))
             widgets.append(box)
-        await row.mount_all(widgets)
+        return widgets
 
     async def ready(self) -> None:
         """Wait until the field boxes exist, so they can be focused."""
@@ -260,6 +299,8 @@ class EntryPanel(Vertical):
         """Switch between filling in a QSO and acting on one."""
         if browsing == self._browsing:
             return
+        if self._editing:
+            self._leave_edit()
         self._browsing = browsing
 
         form = self.query_one("#entry-fields", Horizontal)
@@ -278,9 +319,42 @@ class EntryPanel(Vertical):
             self._draft = {}
             self.focus_first()
 
+    # ------------------------------------------------------------- editing --
+    def start_edit(self, values: dict[str, str]) -> None:
+        """Turn the action bar back into the form, holding a logged QSO.
+
+        The draft put aside on entering browse mode is left alone, so it
+        still comes back once the cursor returns to the insert row.
+        """
+        self._editing = True
+        self.query_one("#entry-browse", BrowseBar).display = False
+        self.query_one("#entry-fields", Horizontal).display = True
+        self.query_one("#entry-extra", Horizontal).display = True
+        for box in self.fields:
+            box.value = values.get(box.field_name, "")
+        self.show_keys(None)
+        self.focus_first()
+
+    def stop_edit(self) -> None:
+        """Back to the action bar, on the same QSO."""
+        if not self._editing:
+            return
+        self._leave_edit()
+        self.query_one("#entry-fields", Horizontal).display = False
+        bar = self.query_one("#entry-browse", BrowseBar)
+        bar.display = True
+        bar.focus()
+
+    def _leave_edit(self) -> None:
+        self._editing = False
+        self.query_one("#entry-extra", Horizontal).display = False
+        for box in self.query(EntryField):
+            box.value = ""
+        self.show_keys(None)
+
     def focus_input(self) -> None:
         """Return the keyboard to wherever input belongs right now."""
-        if self._browsing:
+        if self._browsing and not self._editing:
             self.query_one("#entry-browse", BrowseBar).focus()
         else:
             self.focus_first()
@@ -293,12 +367,13 @@ class EntryPanel(Vertical):
             self.query_one("#entry-hint", Static).update(self._entry_keys())
 
     def show_keys(self, keys: str | None) -> None:
-        """Put a menu's keys on the help line, or the entry's back with None.
+        """Put a dialog's keys on the help line, or the entry's back with None.
 
-        While a menu fills the main panel the entry cannot be typed in, so
-        its line says what the menu's keys do instead: the menus themselves
-        carry no help text.
+        While a dialog fills the main panel the entry cannot be typed in, so
+        its line says what the dialog's keys do instead.
         """
+        if not keys and self._editing:
+            keys = EDIT_KEYS
         self._menu_keys = keys or ""
         hint = self.query_one("#entry-hint", Static)
         if keys:
