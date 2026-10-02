@@ -14,9 +14,93 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical, VerticalScroll
-from textual.screen import ModalScreen
+from textual.screen import ModalScreen, ScreenResultType
 from textual.widgets import Button, Input, Label, OptionList, Static
 from textual.widgets.option_list import Option
+
+
+class PanelScreen(ModalScreen[ScreenResultType]):
+    """A menu drawn in the main panel instead of a floating box.
+
+    It covers exactly the area of the log (``#log-frame``) and leaves the
+    menu bar, the status line, the entry line and the footer in view, so the
+    application never looks like it stacked a dialog on top of itself. It is
+    still a screen underneath, so it takes the keyboard and Escape goes back.
+
+    The container with the ``modal`` class is sized and placed in code: the
+    log's position depends on the terminal and on the entry line's height,
+    which a stylesheet cannot know.
+
+    Panels carry no help text: the line of ``modal-help`` class is hidden and
+    its keys are shown on the entry's help line instead, which is otherwise
+    idle while a panel holds the keyboard.
+    """
+
+    #: Keys shown on the entry's help line while this panel is on top.
+    _keys: str = ""
+
+    def on_mount(self) -> None:
+        # The title goes on the frame, as «Registro» does on the log.
+        panel = self.query(".modal").first()
+        titles = panel.query(".modal-title")
+        if titles:
+            title = titles.first()
+            panel.border_title = str(title.content)  # type: ignore[attr-defined]
+            title.display = False
+        helps = panel.query(".modal-help")
+        if helps:
+            help_line = helps.first()
+            self._keys = self._keys or str(help_line.content)  # type: ignore[attr-defined]
+            help_line.display = False
+        self._publish_keys()
+        self.call_after_refresh(self._fit_to_panel)
+
+    def on_screen_resume(self) -> None:
+        self._publish_keys()
+
+    def set_keys(self, keys: str) -> None:
+        """Change the keys this panel offers, e.g. when its focus moves."""
+        self._keys = keys
+        self._publish_keys()
+
+    def _publish_keys(self) -> None:
+        if self.app.screen is self:
+            _show_keys(self.app, self._keys)
+
+    def dismiss(self, result: ScreenResultType | None = None):  # type: ignore[no-untyped-def]
+        awaitable = super().dismiss(result)
+        # Whatever is on top once this one is gone decides the help line.
+        self.app.call_later(_restore_keys, self.app)
+        return awaitable
+
+    def on_resize(self) -> None:
+        self.call_after_refresh(self._fit_to_panel)
+
+    def _fit_to_panel(self) -> None:
+        try:
+            frame = self.app.screen_stack[0].query_one("#log-frame")
+            panel = self.query(".modal").first()
+        except Exception:  # noqa: BLE001 - nothing to fit, e.g. during teardown
+            return
+        region = frame.region
+        panel.styles.offset = (region.x, region.y)
+        panel.styles.width = region.width
+        panel.styles.height = region.height
+        panel.styles.max_width = None
+        panel.styles.max_height = None
+
+
+def _show_keys(app: Any, keys: str | None) -> None:
+    try:
+        entry = app.screen_stack[0].query_one("#entry")
+    except Exception:  # noqa: BLE001 - the main screen is being torn down
+        return
+    entry.show_keys(keys)
+
+
+def _restore_keys(app: Any) -> None:
+    top = app.screen
+    _show_keys(app, top._keys if isinstance(top, PanelScreen) else None)
 
 
 @dataclass(frozen=True, slots=True)
@@ -34,7 +118,7 @@ class Choice:
         return f"{self.label} {self.detail} {self.search_extra}".lower()
 
 
-class SelectionScreen(ModalScreen[Any]):
+class SelectionScreen(PanelScreen[Any]):
     """Filterable list; dismisses with the chosen value or None."""
 
     BINDINGS = [
@@ -50,7 +134,6 @@ class SelectionScreen(ModalScreen[Any]):
         subtitle: str = "",
         current: Any = None,
         allow_filter: bool = True,
-        wide: bool = False,
     ) -> None:
         super().__init__()
         self.title_text = title
@@ -58,12 +141,10 @@ class SelectionScreen(ModalScreen[Any]):
         self.choices = choices
         self.current = current
         self.allow_filter = allow_filter
-        #: Wider box for lists whose detail line needs the room.
-        self.wide = wide
         self._visible: list[Choice] = list(choices)
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-wide-list" if self.wide else "modal"):
+        with Vertical(classes="modal"):
             yield Label(self.title_text, classes="modal-title")
             if self.subtitle_text:
                 yield Static(self.subtitle_text, classes="modal-subtitle")
@@ -127,7 +208,7 @@ class SelectionScreen(ModalScreen[Any]):
         self.dismiss(None)
 
 
-class ConfirmScreen(ModalScreen[bool]):
+class ConfirmScreen(PanelScreen[bool]):
     """Yes/no confirmation, defaulting to no.
 
     Three ways to answer, because a confirmation appears at the moment the
@@ -155,7 +236,7 @@ class ConfirmScreen(ModalScreen[bool]):
         self.danger = danger
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-small"):
+        with Vertical(classes="modal"):
             yield Label(self.question, classes="modal-title")
             if self.detail:
                 yield Static(self.detail, classes="modal-subtitle")
@@ -211,8 +292,10 @@ class Field:
     kind: str = "text"
 
 
-class FormScreen(ModalScreen[dict[str, str] | None]):
+class FormScreen(PanelScreen[dict[str, str] | None]):
     """Small vertical form; dismisses with a dict of values or None."""
+
+    _keys = "Tab campo siguiente · Enter o Ctrl+S guardar · Esc cancelar"
 
     BINDINGS = [
         Binding("escape", "cancel", "Cancelar"),
@@ -238,7 +321,7 @@ class FormScreen(ModalScreen[dict[str, str] | None]):
         self.save_label = save_label
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-form"):
+        with Vertical(classes="modal"):
             yield Label(self.title_text, classes="modal-title")
             if self.subtitle_text:
                 yield Static(self.subtitle_text, classes="modal-subtitle")

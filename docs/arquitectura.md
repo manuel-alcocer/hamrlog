@@ -106,13 +106,20 @@ El borrador a medio escribir se guarda al entrar y se restaura al salir.
 
 **Registro y agenda son pantallas separadas.** Empezaron como dos pestañas de
 una misma pantalla y se demostró confuso: en radioafición «contactos» es la
-gente, no los QSO. Ahora `F1` es el registro (`tui/screens/log.py`) y `F8` la
+gente, no los QSO. Ahora `Alt+R` es el registro (`tui/screens/log.py`) y `Alt+O` la
 agenda (`tui/screens/contacts.py`), y se sustituyen la una a la otra en vez de
 apilarse.
 
 **Un solo selector de modo.** Analógicos y digitales estaban en `F4` y `F5`,
 una distinción que le importa al programa y no al operador, que solo piensa en
-«modo». Ahora `F4` los lista todos con el grupo buscable en el filtro.
+«modo». Ahora `Alt+M` los lista todos con el grupo buscable en el filtro.
+
+**Atajos con Alt en vez de teclas de función.** Varios emuladores de terminal
+se quedan con las F (`F10` sobre todo), y para eso existía un menú navegable
+con cursores que en la práctica no usaba nadie. Ahora cada pantalla es
+`Alt` más una letra de su nombre, resaltada en la barra (`Alt+R` Registro,
+`Alt+O` cOntactos, `Alt+T` rpTr cuando la inicial ya estaba cogida), y el menú
+navegable desapareció.
 
 **La agenda no tiene claves ajenas al log.** Un listín de usuarios DMR son
 decenas de miles de filas que llegan de golpe y se reemplazan enteras; atarlas
@@ -157,7 +164,7 @@ a la conversión `_to_row` de `services.py` y al exportador ADIF. Sube
 
 **Un modo nuevo.** Una entrada en la tupla correspondiente de `core/modes.py`,
 con su `adif_mode` y su `adif_submode`. Si necesita datos propios, añádelos en
-`digital_fields`: la pantalla F5 se genera sola a partir de esa definición.
+`digital_fields`: las preguntas tras elegir el modo se generan solas a partir de esa definición.
 
 **Un formato de listín nuevo.** Añade sus encabezados a `HEADER_ALIASES` en
 `core/contacts.py`; si es para escribir, una rama en `_rows_for` y una entrada

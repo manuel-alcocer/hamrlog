@@ -119,41 +119,27 @@ Screen {
     padding: 0 1;
 }
 
-/* ----------------------------------------------------------- modals ---- */
+/* ----------------------------------------------------------- panels ---- */
 
+/* Menus are drawn in place of the log (see PanelScreen), framed like it, so
+   they read as another view of the main panel rather than a floating box.
+   Size and position are set in code; the widths below only matter until
+   then. */
 .modal {
     width: 84;
-    max-width: 96%;
     height: auto;
-    max-height: 90%;
-    padding: 1 2;
+    padding: 0 1;
     background: $surface;
-    border: thick $primary;
-    align: center middle;
+    border: round $accent;
+    border-title-color: $accent;
+    border-title-style: bold;
+    border-title-align: left;
 }
 
-.modal-small {
-    width: 64;
-}
-
-.modal-wide {
-    width: 96%;
-    height: 90%;
-}
-
-/* Repeater rows carry frequency, shift, tone and mode, so they need room. */
-.modal-wide-list {
-    width: 100;
-    max-width: 96%;
-}
-
-.modal-form {
-    width: 72;
-}
-
-ModalScreen {
-    align: center middle;
-    background: $background 60%;
+/* Transparent: everything around the panel stays in view, undimmed. */
+PanelScreen {
+    align: left top;
+    background: transparent;
 }
 
 .modal-title {
@@ -176,11 +162,6 @@ ModalScreen {
     padding-top: 1;
 }
 
-.modal-legend {
-    width: 100%;
-    color: $text-muted;
-}
-
 .modal-preview {
     width: 100%;
     height: auto;
@@ -195,36 +176,52 @@ ModalScreen {
     padding-top: 1;
 }
 
+/* Flat, one line high: the panel is one frame, with no boxes inside it. */
 .modal-buttons Button {
     margin-left: 2;
+    border: none;
+    height: 1;
+    min-width: 14;
 }
 
+/* Lists take the height the panel has, like the log they replace, and have
+   no frame of their own. */
 .modal OptionList {
-    height: auto;
-    max-height: 20;
-    border: round $primary-darken-2;
+    height: 1fr;
+    border: none;
     background: $surface;
 }
 
-.modal-wide OptionList {
-    max-height: 1fr;
+/* Text boxes look like the entry line's: one row, told apart by colour. */
+.modal Input {
+    border: none;
+    height: 1;
+    padding: 0 1;
+    background: $boost;
+}
+
+.modal Input:focus {
+    background: $primary-darken-2;
+    text-style: bold;
 }
 
 /* ------------------------------------------------------------ forms ---- */
 
+/* Takes what the panel has left and scrolls, so the buttons below it are
+   never pushed out of view. */
 .form-body {
-    height: auto;
-    max-height: 24;
+    height: 1fr;
 }
 
 .form-row {
-    height: 3;
+    height: 1;
     width: 100%;
+    margin-bottom: 1;
 }
 
 .form-label {
     width: 22;
-    padding: 1 1 0 0;
+    padding: 0 1 0 0;
     color: $text-muted;
 }
 
@@ -233,9 +230,8 @@ ModalScreen {
 }
 
 .form-readonly {
-    padding: 1 1;
+    padding: 0 1;
     color: $text-muted;
-    border: round $panel;
 }
 
 .form-error {
@@ -247,8 +243,9 @@ ModalScreen {
 /* --------------------------------------------------------- contacts ---- */
 
 .search-row {
-    height: 3;
+    height: 1;
     width: 100%;
+    margin-bottom: 1;
 }
 
 .search-row Input {
@@ -257,12 +254,12 @@ ModalScreen {
 
 .search-count {
     width: 18;
-    padding: 1 1;
+    padding: 0 1;
     color: $text-muted;
     text-align: right;
 }
 
-#contacts-table {
+#log-table {
     height: 1fr;
     min-height: 10;
 }
@@ -290,4 +287,36 @@ ModalScreen {
 #book-result {
     height: auto;
     max-height: 4;
+}
+
+.columns {
+    height: 1fr;
+}
+
+.column {
+    width: 1fr;
+    height: 1fr;
+}
+
+/* Headed like the log's columns. */
+.column-title {
+    width: 100%;
+    background: $panel;
+    text-style: bold;
+    /* Lined up with the names below, past the list's "● " marker. */
+    padding: 0 3;
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
+}
+
+/* The only separation between columns: a vertical line. */
+.column-ruled {
+    border-left: solid $primary-darken-2;
+}
+
+.column OptionList {
+    height: 1fr;
+    /* Columns share the width: a wrapped entry would read as two. */
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
 }

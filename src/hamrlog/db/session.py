@@ -16,7 +16,7 @@ from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..paths import database_path, ensure_dirs
-from .migrations import add_missing_columns
+from .migrations import add_missing_columns, upgrade_data
 from .models import CURRENT_SCHEMA_VERSION, Base, SchemaVersion
 
 _engine: Engine | None = None
@@ -59,6 +59,7 @@ def init_engine(url: str | None = None, *, echo: bool = False) -> Engine:
     # Existing databases predate any column added since they were created.
     add_missing_columns(_engine)
     _session_factory = sessionmaker(bind=_engine, expire_on_commit=False, future=True)
+    upgrade_data(_engine, _stored_schema_version())
     _stamp_schema_version()
     return _engine
 
@@ -73,6 +74,13 @@ def _enable_sqlite_pragmas(engine: Engine) -> None:
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
         cursor.close()
+
+
+def _stored_schema_version() -> int | None:
+    """Revision the database was left at, None when it was just created."""
+    with session_scope() as session:
+        row = session.scalars(select(SchemaVersion).limit(1)).first()
+        return row.version if row is not None else None
 
 
 def _stamp_schema_version() -> None:

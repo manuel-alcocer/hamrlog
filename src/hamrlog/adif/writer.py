@@ -71,10 +71,10 @@ def qso_to_adif(row: QsoRow, *, station: dict[str, str] | None = None) -> str:
         _field("STATION_CALLSIGN", row.operator_callsign),
     ]
 
+    parts.append(_field("MY_ANTENNA", row.antenna_name))
     if station:
         parts += [
             _field("MY_RIG", station.get("rig", "")),
-            _field("MY_ANTENNA", station.get("antenna", "")),
             _field("TX_PWR", station.get("power_w", "")),
             _field("MY_GRIDSQUARE", station.get("gridsquare", "")),
             _field("MY_CITY", station.get("qth", "")),
@@ -124,7 +124,7 @@ def write_adif_file(
         path: Destination file.
         rows: Contacts to export.
         stations: Optional map of station name to rig details, so MY_RIG and
-            MY_ANTENNA can be filled per contact.
+            TX_PWR can be filled per contact. MY_ANTENNA comes from the row.
 
     Returns:
         Number of records written.

@@ -1,4 +1,4 @@
-"""F9: repeater manager.
+"""Alt+T: repeater manager.
 
 Selecting a repeater adopts everything it defines — output and input
 frequencies, band, mode and digital parameters — so the operator can go back
@@ -11,20 +11,19 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList, Static
 from textual.widgets.option_list import Option
 
 from ...core import bands, modes, repeaters, units
 from ...core.services import RepeaterService, ServiceError
 from ...core.state import SessionState
-from .base import ConfirmScreen, Field, FormScreen
+from .base import ConfirmScreen, Field, FormScreen, PanelScreen
 
 #: Sentinel returned when the operator chooses to work direct.
 DIRECT = 0
 
 
-class RepeaterScreen(ModalScreen[int | None]):
+class RepeaterScreen(PanelScreen[int | None]):
     """Pick the repeater in use, or manage the list.
 
     Dismisses with the repeater id, ``DIRECT`` for simplex, or None when
@@ -46,8 +45,8 @@ class RepeaterScreen(ModalScreen[int | None]):
         self._ids: list[int] = []
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-wide-list"):
-            yield Label("F9 · Repetidor", classes="modal-title")
+        with Vertical(classes="modal"):
+            yield Label("Alt+T · Repetidor", classes="modal-title")
             yield Static("", id="repeater-current", classes="modal-subtitle")
             yield OptionList(id="repeaters")
             yield Static(

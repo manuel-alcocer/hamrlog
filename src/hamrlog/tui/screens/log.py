@@ -1,7 +1,7 @@
-"""F1: the log — the QSOs recorded, with search, edit and delete.
+"""Alt+R: the log — the QSOs recorded, with search, edit and delete.
 
 This is the record of what happened on the air. Who those stations are lives
-in the address book (F8), which is a different question.
+in the address book (Alt+O), which is a different question.
 
 Edit rules live in the service layer; this screen only reflects them. A QSO
 timestamped by the application clock (AUTO) shows every field but only lets
@@ -19,14 +19,13 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Static
 
 from ...core import bands, modes, units
 from ...core.dto import QsoRow
 from ...core.services import QsoService, ServiceError
 from ...core.state import SessionState
-from .base import ConfirmScreen, Field, FormScreen
+from .base import ConfirmScreen, Field, FormScreen, PanelScreen
 
 _COLUMNS: tuple[tuple[str, int | None], ...] = (
     ("TIPO", 6),
@@ -44,12 +43,12 @@ _COLUMNS: tuple[tuple[str, int | None], ...] = (
 )
 
 
-class LogScreen(ModalScreen[bool]):
+class LogScreen(PanelScreen[bool]):
     """The recorded QSOs. Dismisses True when anything changed."""
 
     BINDINGS = [
         Binding("escape", "close", "Cerrar"),
-        Binding("f1", "close", "Cerrar", show=False),
+        Binding("alt+r", "close", "Cerrar", show=False),
         Binding("ctrl+n", "new_manual", "Añadir manual"),
         Binding("ctrl+e", "edit", "Editar"),
         # Delete works from the table; Ctrl+D is given priority so it also
@@ -67,12 +66,8 @@ class LogScreen(ModalScreen[bool]):
         self._changed = False
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-wide"):
-            yield Label("F1 · Registro", classes="modal-title")
-            yield Static(
-                "Los QSO que llevas hechos. Quién es cada indicativo está en F8.",
-                classes="modal-subtitle",
-            )
+        with Vertical(classes="modal"):
+            yield Label("Alt+R · Registro", classes="modal-title")
             with Horizontal(classes="search-row"):
                 yield Input(
                     placeholder="Buscar por indicativo, nombre, QTH, país o comentario...",
@@ -81,14 +76,8 @@ class LogScreen(ModalScreen[bool]):
                 yield Static("", id="search-count", classes="search-count")
             yield DataTable(id="log-table")
             yield Static(
-                "[yellow]AUTO[/yellow] = fecha puesta por el programa, solo se puede "
-                "corregir el indicativo.   [green]MAN[/green] = fecha introducida a "
-                "mano, todo editable.",
-                classes="modal-legend",
-            )
-            yield Static(
                 "Enter editar · Supr borrar · Ctrl+N añadir con fecha manual · "
-                "Ctrl+F buscar · F8 abre los contactos · Esc cerrar",
+                "Ctrl+F buscar · Alt+O abre los contactos · Esc cerrar",
                 classes="modal-help",
             )
 

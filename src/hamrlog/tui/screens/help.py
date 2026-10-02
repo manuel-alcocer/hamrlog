@@ -1,12 +1,13 @@
-"""F1: keyboard reference and command list."""
+"""Ctrl+F1: keyboard reference and command list."""
 
 from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical, VerticalScroll
-from textual.screen import ModalScreen
 from textual.widgets import Label, Markdown, Static
+
+from .base import PanelScreen
 
 HELP_TEXT = """
 ## La pantalla principal
@@ -67,7 +68,7 @@ La última fila del histórico es siempre **`<Insertar nuevo>`**: es el sitio
 donde aparecerá el próximo QSO, y donde vuelve el cursor solo después de
 guardar.
 
-En **F5 → Histórico** eliges la dirección: los nuevos abajo (la lista crece
+En **Alt+C → Histórico** eliges la dirección: los nuevos abajo (la lista crece
 hacia abajo, es lo normal) o los nuevos arriba. La fila `<Insertar nuevo>`
 acompaña siempre al extremo por el que crece.
 
@@ -77,12 +78,6 @@ Antes de borrar algo siempre se pregunta, y se puede responder de tres maneras:
 `←` `→` (o `Tab`) mueven entre los botones y `Enter` confirma el señalado; `S`
 dice que sí directamente; `N` o `Esc` dicen que no. El botón **No** viene
 seleccionado de partida, para que un Enter por inercia no borre nada.
-
-## El menú de arriba
-
-`F10` activa la barra superior: `←` y `→` la recorren, `Enter` abre la entrada
-señalada y `Esc` vuelve a escribir, igual que en Midnight Commander. Sirve como
-salida si tu terminal se queda con alguna tecla de función.
 
 ## Flujo de trabajo
 
@@ -94,7 +89,7 @@ fecha y hora UTC automáticas.
 ea7wm,victor,59,57
 ```
 
-El orden de los campos se configura en **F10 → Entrada rápida**. Por defecto es
+El orden de los campos se configura en **Alt+C → Entrada rápida**. Por defecto es
 `indicativo, nombre, rst_env, rst_rec, qth, notas`.
 
 También puedes asignar un campo por nombre en cualquier posición:
@@ -105,7 +100,7 @@ ea7wm,victor,grid=IM76,tg=214,nota=por el repetidor
 
 ## Frecuencias y unidades
 
-Toda frecuencia lleva unidad. En **F5 → Unidades y formato** eliges la que se
+Toda frecuencia lleva unidad. En **Alt+C → Unidades y formato** eliges la que se
 usa para mostrarlas y la que se supone cuando escribes un número sin unidad.
 Se guardan con la grafía del Sistema Internacional, sea cual sea la que
 escribas:
@@ -148,32 +143,31 @@ en `!`:
 bv100!,chen
 ```
 
-El comportamiento se cambia en **F10 → Entrada rápida → Validar indicativos**:
+El comportamiento se cambia en **Alt+C → Entrada rápida → Validar indicativos**:
 `estricta` (por defecto), `avisar` (lo registra con una advertencia) o `no`.
 
 ## Teclas
 
 | Tecla | Acción |
 |---|---|
-| `F1` | **Registro**: los QSO que llevas hechos |
-| `F2` | Selector de banda |
-| `F3` | Frecuencia |
-| `F4` | Modo: SSB, CW, FM, AM, DMR, C4FM, D-STAR, FT8... todos juntos |
-| `F5` | Configuración, incluidas importación y exportación del registro |
-| `F6` | Equipo (emisora y antena) |
-| `F7` | Perfiles: cargar y guardar configuraciones |
-| `F8` | **Contactos**: la agenda de quién es cada indicativo |
-| `F9` | Repetidor: por dónde sales, y alta de repetidores |
-| `F10` | Menú: recorre la barra de arriba con `←` `→` |
+| `Alt+R` | **Registro**: los QSO que llevas hechos |
+| `Alt+B` | Selector de banda |
+| `Alt+F` | Frecuencia |
+| `Alt+M` | Modo: SSB, CW, FM, AM, DMR, C4FM, D-STAR, FT8... todos juntos |
+| `Alt+C` | Configuración, incluidas importación y exportación del registro |
+| `Alt+E` | Equipo y, dentro de él, la antena conectada |
+| `Alt+P` | Perfiles: equipo → antena → configuración |
+| `Alt+O` | **Contactos**: la agenda de quién es cada indicativo |
+| `Alt+T` | Repetidor: por dónde sales, y alta de repetidores |
 | `Ctrl+F1` | Esta ayuda (también `F12` y `/ayuda`) |
 | `Ctrl+Q` | Salir |
 
-**Registro** y **Contactos** son cosas distintas: el registro (`F1`) es lo que
-has trabajado y cuándo; los contactos (`F8`) son quién es cada cual. Desde
+**Registro** y **Contactos** son cosas distintas: el registro (`Alt+R`) es lo que
+has trabajado y cuándo; los contactos (`Alt+O`) son quién es cada cual. Desde
 cualquiera de las dos, la tecla de la otra te lleva allí directamente.
 
-Si tu terminal captura alguna tecla de función (`F10` abre el menú en varios
-emuladores de Linux), usa el comando equivalente en la línea de entrada.
+Si tu terminal se queda con alguna combinación con `Alt`, usa el comando
+equivalente en la línea de entrada.
 
 ## Comandos de la línea de entrada
 
@@ -183,7 +177,7 @@ emuladores de Linux), usa el comando equivalente en la línea de entrada.
 | `/frec 14.250` | Fija la frecuencia |
 | `/modo cw` o `/modo dmr` | Cambia de modo, analógico o digital |
 | `/equipo` | Abre el selector de equipo |
-| `/perfil` o `/perfil HF-Casa` | Abre perfiles o carga uno directamente |
+| `/perfil` o `/perfil 20m` | Abre perfiles o carga una configuración directamente |
 | `/registro` o `/log` | El registro de QSO |
 | `/contactos` o `/agenda` | La agenda |
 | `/exportar` o `/importar` | Importar y exportar el registro |
@@ -196,7 +190,7 @@ emuladores de Linux), usa el comando equivalente en la línea de entrada.
 
 ## Los contactos (agenda)
 
-`F8` abre la agenda: nombre, ciudad, provincia, ID DMR, país y cuántos QSO
+`Alt+O` abre la agenda: nombre, ciudad, provincia, ID DMR, país y cuántos QSO
 llevas con cada estación.
 
 La agenda se llena sola con lo que trabajas: **al registrar un indicativo que
@@ -210,7 +204,7 @@ la línea de entrada, y al pulsar Enter el nombre y el QTH que no hayas escrito
 se rellenan desde la agenda. **Lo que tú escribas siempre manda** sobre lo que
 diga el listín.
 
-Las dos cosas se desactivan en **F5 → Histórico y agenda**. Importar un ADIF no
+Las dos cosas se desactivan en **Alt+C → Histórico y agenda**. Importar un ADIF no
 da de alta contactos: solo lo hace lo que registras en directo.
 
 ### Importar listas de usuarios DMR
@@ -245,26 +239,44 @@ Hay tres formas, según dónde estés:
   Es lo que quieres cuando acabas de guardar un indicativo mal escrito.
 * **`Tab` hasta el histórico, `↑↓` para elegir y `Supr`** borra el contacto
   que tengas seleccionado.
-* **`F1`, elegir en la lista y `Supr`** (o `Ctrl+D`, que funciona también
+* **`Alt+R`, elegir en la lista y `Supr`** (o `Ctrl+D`, que funciona también
   mientras escribes en el buscador). Desde ahí puedes buscar primero, lo que
   es más cómodo cuando el QSO es antiguo.
 
 Siempre se pide confirmación indicando el indicativo, la fecha, la banda y el
 modo del contacto que se va a borrar.
 
+## Perfiles: equipo, antena y configuración
+
+`Alt+P` muestra tres columnas: equipos, las antenas del señalado y las
+configuraciones de ese equipo en las bandas de la antena. `↑` `↓` se mueven,
+`→` entra, `←` vuelve y `Enter` carga los tres a la vez. En las
+configuraciones: `G` guarda la actual, `A` asigna una existente, `S`
+sobrescribe, `Supr` la quita de ese equipo.
+
+Las antenas se crean en **Alt+C → Antenas** con sus bandas (`2m, 70cm`) y se
+conectan a cada equipo en `Alt+E`: `→` entra en sus antenas, `A` asigna una,
+`Supr` la quita. Una antena puede servir a varios equipos.
+
+Las configuraciones se reutilizan entre equipos y se gestionan todas en
+**Alt+C → Configuraciones**. Cada equipo tiene tipos (HF, VHF, UHF, CB...) en
+su ficha de `Alt+E`; un tipo es un rango de frecuencias, y el equipo solo
+admite configuraciones dentro de alguno. Los tipos se crean en
+**Alt+C → Tipos de equipo**.
+
 ## Salir por un repetidor
 
-`F9` elige por dónde sale tu señal. Al seleccionar un repetidor se adopta todo
+`Alt+T` elige por dónde sale tu señal. Al seleccionar un repetidor se adopta todo
 lo que define: frecuencia de escucha y de transmisión, banda, modo y sus datos
 digitales (color code, talkgroup, reflector, room). A partir de ahí solo tienes
 que registrar indicativos.
 
-Para dar uno de alta, `F9` y luego `N`. Basta con el indicativo y la frecuencia
+Para dar uno de alta, `Alt+T` y luego `N`. Basta con el indicativo y la frecuencia
 de salida (la que sintonizas): el desplazamiento se calcula solo según la banda
 (-600 kHz en 2 m, -7,6 MHz en 70 cm) y puedes ajustarlo si tu repetidor es
 atípico. Si el modo es digital se piden después sus parámetros propios.
 
-Cambiar de banda o de frecuencia a mano (`F2`, `F3`) te saca del repetidor,
+Cambiar de banda o de frecuencia a mano (`Alt+B`, `Alt+F`) te saca del repetidor,
 porque ya no describen dónde estás trabajando. `D` en la lista, o `/directo`,
 vuelve a simplex.
 
@@ -277,18 +289,18 @@ que transmites), `FREQ_RX` con la de salida (lo que escuchas) y `PROP_MODE=RPT`.
 * **AUTO**: la fecha y la hora las pone el programa al pulsar Enter. Es la
   prueba de cuándo ocurrió el contacto, así que solo se permite corregir el
   indicativo (un error de escucha es lo único que se corrige después).
-* **MANUAL**: contactos añadidos con fecha a mano (`F8 → Ctrl+N`) o importados
+* **MANUAL**: contactos añadidos con fecha a mano (`Alt+O → Ctrl+N`) o importados
   desde ADIF. Todos sus campos son editables.
 
 ## Dónde se guarda todo
 
 Una base de datos SQLite en la carpeta de datos del usuario. Se muestra la ruta
-exacta en **F10 → Información del sistema**. Para usar PostgreSQL basta con
+exacta en **Alt+C → Información del sistema**. Para usar PostgreSQL basta con
 definir `HAMRLOG_DATABASE_URL`.
 """
 
 
-class HelpScreen(ModalScreen[None]):
+class HelpScreen(PanelScreen[None]):
     """Scrollable keyboard and command reference."""
 
     BINDINGS = [
@@ -299,7 +311,7 @@ class HelpScreen(ModalScreen[None]):
     ]
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-wide"):
+        with Vertical(classes="modal"):
             yield Label("Ctrl+F1 · Ayuda", classes="modal-title")
             with VerticalScroll(classes="help-body"):
                 yield Markdown(HELP_TEXT)

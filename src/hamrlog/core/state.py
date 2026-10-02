@@ -20,7 +20,8 @@ class SessionState:
 
     Attributes:
         operator_id: Local operator logging the contacts.
-        station_id: Rig/antenna combination in use.
+        station_id: Rig in use.
+        antenna_id: Antenna connected to it, one of the station's.
         repeater_id: Repeater being worked through, None for simplex.
         repeater_call: Its callsign, kept here to avoid a query per contact.
         band: ADIF band name, e.g. "40m".
@@ -44,6 +45,7 @@ class SessionState:
 
     operator_id: int | None = None
     station_id: int | None = None
+    antenna_id: int | None = None
     repeater_id: int | None = None
     repeater_call: str = ""
     band: str = ""

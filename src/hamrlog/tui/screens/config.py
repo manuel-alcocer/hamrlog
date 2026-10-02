@@ -1,4 +1,4 @@
-"""F10: configuration.
+"""Alt+C: configuration.
 
 Sections are deliberately flat: pick one, edit it, come back. During a radio
 session the operator should never need to dig through nested menus.
@@ -10,7 +10,6 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -22,7 +21,7 @@ from ...core.state import SessionState
 from ...db.session import default_database_url
 from ...paths import config_dir, data_dir, export_dir
 from ..widgets.history import ORDER_NEWEST_FIRST, ORDER_OLDEST_FIRST
-from .base import Choice, ConfirmScreen, Field, FormScreen, SelectionScreen
+from .base import Choice, ConfirmScreen, Field, FormScreen, PanelScreen, SelectionScreen
 
 #: Accepted spellings for the callsign validation mode, in both languages.
 _VALIDATION_WORDS: dict[str, str] = {
@@ -48,23 +47,26 @@ METRICS_KEY = "metrics"
 DEFAULT_METRICS = {"enabled": False, "port": 9119}
 
 
-class ConfigScreen(ModalScreen[bool]):
+class ConfigScreen(PanelScreen[bool]):
     """Configuration menu. Dismisses True when the session state changed."""
 
     BINDINGS = [
         Binding("escape", "close", "Cerrar"),
-        Binding("f5", "close", "Cerrar", show=False),
+        Binding("alt+c", "close", "Cerrar", show=False),
     ]
 
-    _SECTIONS: tuple[tuple[str, str, str], ...] = (
-        ("operator", "Operador activo", "Quién registra los contactos de esta sesión"),
-        ("operators", "Gestionar operadores", "Crear, editar y desactivar operadores"),
-        ("entry", "Entrada rápida", "Orden de las casillas y validación de indicativos"),
-        ("units", "Unidades y formato", "Unidad de frecuencia y separadores numéricos"),
-        ("history", "Histórico y agenda", "Dirección de la lista y enlace con los contactos"),
-        ("transfer", "Importar y exportar", "Registro en ADIF y CSV (o /exportar)"),
-        ("metrics", "Métricas Prometheus", "Exportador HTTP para monitorización"),
-        ("info", "Información del sistema", "Rutas, base de datos y versión"),
+    _SECTIONS: tuple[tuple[str, str], ...] = (
+        ("operator", "Operador activo"),
+        ("operators", "Gestionar operadores"),
+        ("configurations", "Configuraciones"),
+        ("antennas", "Antenas"),
+        ("station_types", "Tipos de equipo"),
+        ("entry", "Entrada rápida"),
+        ("units", "Unidades y formato"),
+        ("history", "Histórico y agenda"),
+        ("transfer", "Importar y exportar"),
+        ("metrics", "Métricas Prometheus"),
+        ("info", "Información del sistema"),
     )
 
     def __init__(self, state: SessionState) -> None:
@@ -74,7 +76,7 @@ class ConfigScreen(ModalScreen[bool]):
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
-            yield Label("F5 · Configuración", classes="modal-title")
+            yield Label("Alt+C · Configuración", classes="modal-title")
             yield Static("", id="config-info", classes="modal-subtitle")
             yield OptionList(id="sections")
             yield Static("", id="config-result", classes="modal-preview")
@@ -82,8 +84,8 @@ class ConfigScreen(ModalScreen[bool]):
 
     def on_mount(self) -> None:
         option_list = self.query_one("#sections", OptionList)
-        for key, label, detail in self._SECTIONS:
-            option_list.add_option(Option(f"  {label:<24} [dim]{detail}[/dim]", id=key))
+        for key, label in self._SECTIONS:
+            option_list.add_option(Option(f"  {label}", id=key))
         option_list.highlighted = 0
         option_list.focus()
         self._refresh_summary()
@@ -104,6 +106,9 @@ class ConfigScreen(ModalScreen[bool]):
         handler = {
             "operator": self._pick_operator,
             "operators": self._manage_operators,
+            "configurations": self._manage_configurations,
+            "antennas": self._manage_antennas,
+            "station_types": self._manage_station_types,
             "entry": self._edit_entry_format,
             "units": self._edit_units,
             "history": self._edit_history,
@@ -228,6 +233,22 @@ class ConfigScreen(ModalScreen[bool]):
             return
         self._refresh_summary()
         self._result("[green]Operador actualizado.[/green]")
+
+    # ------------------------------------------------------ configurations --
+    def _manage_configurations(self) -> None:
+        from .profiles import ConfigurationsScreen
+
+        self.app.push_screen(ConfigurationsScreen(self.state))
+
+    def _manage_antennas(self) -> None:
+        from .stations import AntennasScreen
+
+        self.app.push_screen(AntennasScreen())
+
+    def _manage_station_types(self) -> None:
+        from .stations import StationTypesScreen
+
+        self.app.push_screen(StationTypesScreen())
 
     # --------------------------------------------------------------- entry --
     def _edit_entry_format(self) -> None:
@@ -414,7 +435,7 @@ class ConfigScreen(ModalScreen[bool]):
     # ------------------------------------------------------------ transfer --
     def _open_transfer(self) -> None:
         """Import and export of the QSO log. The address book has its own
-        import in F8, since the file formats are unrelated."""
+        import in Alt+O, since the file formats are unrelated."""
         from .transfer import TransferScreen
 
         self.app.push_screen(TransferScreen(self.state), self._after_transfer)

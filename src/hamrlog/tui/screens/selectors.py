@@ -1,4 +1,4 @@
-"""Band, frequency and mode selectors (F2 to F5)."""
+"""Band, frequency and mode selectors (Alt+B to Alt+M)."""
 
 from __future__ import annotations
 
@@ -6,21 +6,20 @@ from textual import on
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
 from textual.widgets import Button, Input, Label, Static
 
 from ...core import bands, modes, units
-from .base import Choice, SelectionScreen
+from .base import Choice, PanelScreen, SelectionScreen
 
 
 def band_screen(current: str) -> SelectionScreen:
-    """F2: pick a band. Returns the ADIF band name."""
+    """Alt+B: pick a band. Returns the ADIF band name."""
     choices = [
         Choice(value=band.name, label=f"{band.name:<7}", detail=band.range_text)
         for band in bands.BANDS
     ]
     return SelectionScreen(
-        "F2 · Selector de banda",
+        "Alt+B · Selector de banda",
         choices,
         subtitle="Al cambiar de banda se ajusta la frecuencia al centro de actividad.",
         current=current,
@@ -36,7 +35,7 @@ _MODE_GROUPS: tuple[tuple[str, tuple[modes.Mode, ...]], ...] = (
 
 
 def mode_screen(current: str) -> SelectionScreen:
-    """F4: pick any mode, analogue or digital.
+    """Alt+M: pick any mode, analogue or digital.
 
     One list rather than two: an operator choosing how to work thinks "mode",
     not "analogue mode or digital mode". The group name stays searchable, so
@@ -62,17 +61,16 @@ def mode_screen(current: str) -> SelectionScreen:
                 )
             )
     return SelectionScreen(
-        "F4 · Modo",
+        "Alt+M · Modo",
         choices,
         subtitle="Escribe para filtrar: «dmr», «digital», «datos», «cw»... "
         "Los modos digitales piden sus datos propios al elegirlos.",
         current=current,
-        wide=True,
     )
 
 
-class FrequencyScreen(ModalScreen[int | None]):
-    """F3: type a frequency, with live band detection.
+class FrequencyScreen(PanelScreen[int | None]):
+    """Alt+F: type a frequency, with live band detection.
 
     Accepts MHz (14.250), kHz (7130) and Hz, with or without an explicit unit.
     """
@@ -91,9 +89,8 @@ class FrequencyScreen(ModalScreen[int | None]):
         initial = (
             current.format(self.current_hz, with_unit=False) if self.current_hz else ""
         )
-        with Vertical(classes="modal modal-small"):
-            yield Label("F3 · Frecuencia", classes="modal-title")
-            yield Static(bands.frequency_help(), classes="modal-subtitle")
+        with Vertical(classes="modal"):
+            yield Label("Alt+F · Frecuencia", classes="modal-title")
             yield Input(
                 value=initial,
                 placeholder=current.format(14_250_000, with_unit=False),

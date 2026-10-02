@@ -215,7 +215,9 @@ def main(argv: list[str] | None = None) -> int:
 
     from .tui.app import HamrlogApp
 
-    HamrlogApp(database_url=args.database).run()
+    # Keyboard only: the mouse is not captured, so the terminal keeps it for
+    # selecting and copying text.
+    HamrlogApp(database_url=args.database).run(mouse=False)
     return 0
 
 

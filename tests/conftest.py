@@ -9,7 +9,7 @@ from __future__ import annotations
 import pytest
 
 from hamrlog.core import units
-from hamrlog.core.services import OperatorService, StationService
+from hamrlog.core.services import AntennaService, OperatorService, StationService
 from hamrlog.core.state import SessionState
 from hamrlog.db import session as db_session
 
@@ -46,13 +46,18 @@ def operator():
 
 @pytest.fixture
 def station():
-    return StationService.create("HF-Casa", rig="IC-7300", antenna="Dipolo", power_w=100)
+    created = StationService.create("HF-Casa", rig="IC-7300", power_w=100)
+    antenna = AntennaService.create("Dipolo", ["40m", "20m"])
+    StationService.assign_antenna(created.id, antenna.id)
+    return StationService.get(created.id)
 
 
 @pytest.fixture
 def state(operator, station) -> SessionState:
     """A configured session: 40 m, SSB, with operator and rig selected."""
-    value = SessionState(operator_id=operator.id, station_id=station.id)
+    value = SessionState(
+        operator_id=operator.id, station_id=station.id, antenna_id=station.antennas[0].id
+    )
     value.set_band("40m")
     value.set_mode("SSB")
     return value

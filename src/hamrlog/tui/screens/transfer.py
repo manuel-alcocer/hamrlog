@@ -1,4 +1,4 @@
-"""F9: log import and export (ADIF and CSV)."""
+"""Alt+T: log import and export (ADIF and CSV)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
-from textual.screen import ModalScreen
 from textual.widgets import Label, OptionList, Static
 from textual.widgets.option_list import Option
 
@@ -16,10 +15,10 @@ from ...core import transfer
 from ...core.services import QsoService, ServiceError
 from ...core.state import SessionState
 from ...paths import export_dir
-from .base import Choice, Field, FormScreen, SelectionScreen
+from .base import Choice, Field, FormScreen, PanelScreen, SelectionScreen
 
 
-class TransferScreen(ModalScreen[bool]):
+class TransferScreen(PanelScreen[bool]):
     """Export and import menu. Dismisses True when the log changed."""
 
     BINDINGS = [Binding("escape", "close", "Cerrar")]
@@ -127,7 +126,7 @@ class TransferScreen(ModalScreen[bool]):
         if not values or not values.get("path"):
             return
         if self.state.operator_id is None:
-            self.app.notify("Selecciona un operador antes de importar (F10).", severity="error")
+            self.app.notify("Selecciona un operador antes de importar (Alt+C).", severity="error")
             return
         path = Path(values["path"]).expanduser()
         if not path.is_file():

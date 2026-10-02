@@ -11,9 +11,10 @@ import datetime as dt
 from typing import Any
 
 from sqlalchemy import func, or_, select
-from sqlalchemy.orm import joinedload
+from sqlalchemy.orm import joinedload, selectinload
 
 from ..db.models import (
+    Antenna,
     Contact,
     EntryMode,
     Operator,
@@ -22,6 +23,10 @@ from ..db.models import (
     Repeater,
     Setting,
     Station,
+    StationType,
+    station_antenna_links,
+    station_profile_links,
+    station_type_links,
 )
 from ..db.session import session_scope
 from . import bands, modes, repeaters
@@ -122,21 +127,37 @@ class OperatorService:
 # --------------------------------------------------------------------------- #
 
 class StationService:
-    """Rig and antenna combinations, selected with F6."""
+    """Rigs, each with the antennas it can use, selected with Alt+E."""
+
+    @staticmethod
+    def _query():  # type: ignore[no-untyped-def]
+        # Loaded eagerly: the objects leave the session before anybody reads
+        # their types or configurations.
+        return select(Station).options(
+            selectinload(Station.types),
+            selectinload(Station.profiles),
+            selectinload(Station.antennas),
+        )
 
     @staticmethod
     def list_all() -> list[Station]:
         with session_scope() as session:
-            return list(session.scalars(select(Station).order_by(Station.name)))
+            return list(session.scalars(StationService._query().order_by(Station.name)))
 
     @staticmethod
     def get(station_id: int) -> Station | None:
         with session_scope() as session:
-            return session.get(Station, station_id)
+            return session.scalars(
+                StationService._query().where(Station.id == station_id)
+            ).first()
 
     @staticmethod
     def create(
-        name: str, rig: str = "", antenna: str = "", power_w: int | None = None, notes: str = ""
+        name: str,
+        rig: str = "",
+        power_w: int | None = None,
+        notes: str = "",
+        type_ids: list[int] | None = None,
     ) -> Station:
         clean = name.strip()
         if not clean:
@@ -145,15 +166,16 @@ class StationService:
             if session.scalars(select(Station).where(Station.name == clean)).first():
                 raise ServiceError(f"Ya existe un equipo llamado «{clean}».")
             station = Station(
-                name=clean, rig=rig.strip(), antenna=antenna.strip(),
-                power_w=power_w, notes=notes.strip(),
+                name=clean, rig=rig.strip(), power_w=power_w, notes=notes.strip()
             )
+            station.types = _load_types(session, type_ids or [])
             session.add(station)
             session.flush()
             return station
 
     @staticmethod
-    def update(station_id: int, **changes: Any) -> Station:
+    def update(station_id: int, *, type_ids: list[int] | None = None, **changes: Any) -> Station:
+        """Change a station; ``type_ids`` replaces its types when given."""
         with session_scope() as session:
             station = session.get(Station, station_id)
             if station is None:
@@ -161,6 +183,8 @@ class StationService:
             for key, value in changes.items():
                 if hasattr(station, key):
                     setattr(station, key, value)
+            if type_ids is not None:
+                station.types = _load_types(session, type_ids)
             session.flush()
             return station
 
@@ -171,11 +195,230 @@ class StationService:
             if station is None:
                 raise ServiceError("Equipo no encontrado.")
             # Detach the station from past QSOs instead of losing the contacts.
+            # Its type and configuration links go with it; the configurations
+            # themselves stay, they may belong to other stations.
             session.query(Qso).filter(Qso.station_id == station_id).update({"station_id": None})
             session.query(Profile).filter(Profile.station_id == station_id).update(
                 {"station_id": None}
             )
             session.delete(station)
+
+    @staticmethod
+    def assign_antenna(station_id: int, antenna_id: int) -> None:
+        """Make an antenna available under a station."""
+        with session_scope() as session:
+            station = session.get(Station, station_id)
+            antenna = session.get(Antenna, antenna_id)
+            if station is None or antenna is None:
+                raise ServiceError("Equipo o antena no encontrados.")
+            if antenna not in station.antennas:
+                station.antennas.append(antenna)
+
+    @staticmethod
+    def unassign_antenna(station_id: int, antenna_id: int) -> None:
+        """Stop offering an antenna under a station; it is not deleted."""
+        with session_scope() as session:
+            session.execute(
+                station_antenna_links.delete().where(
+                    station_antenna_links.c.station_id == station_id,
+                    station_antenna_links.c.antenna_id == antenna_id,
+                )
+            )
+
+
+def _load_types(session: Any, type_ids: list[int]) -> list[StationType]:
+    if not type_ids:
+        return []
+    found = list(session.scalars(select(StationType).where(StationType.id.in_(type_ids))))
+    if len(found) != len(set(type_ids)):
+        raise ServiceError("Alguno de los tipos de equipo ya no existe.")
+    return found
+
+
+class StationTypeService:
+    """Station types (HF, VHF, UHF, CB...) and the frequencies they cover."""
+
+    @staticmethod
+    def list_all() -> list[StationType]:
+        with session_scope() as session:
+            return list(
+                session.scalars(
+                    select(StationType).order_by(StationType.min_hz, StationType.name)
+                )
+            )
+
+    @staticmethod
+    def get(type_id: int) -> StationType | None:
+        with session_scope() as session:
+            return session.get(StationType, type_id)
+
+    @staticmethod
+    def create(name: str, min_hz: int | None, max_hz: int | None) -> StationType:
+        clean, low, high = _validate_type(name, min_hz, max_hz)
+        with session_scope() as session:
+            if _type_named(session, clean) is not None:
+                raise ServiceError(f"Ya existe el tipo «{clean}».")
+            station_type = StationType(name=clean, min_hz=low, max_hz=high)
+            session.add(station_type)
+            session.flush()
+            return station_type
+
+    @staticmethod
+    def update(type_id: int, name: str, min_hz: int | None, max_hz: int | None) -> StationType:
+        clean, low, high = _validate_type(name, min_hz, max_hz)
+        with session_scope() as session:
+            station_type = session.get(StationType, type_id)
+            if station_type is None:
+                raise ServiceError("Tipo de equipo no encontrado.")
+            other = _type_named(session, clean)
+            if other is not None and other.id != type_id:
+                raise ServiceError(f"Ya existe el tipo «{clean}».")
+            station_type.name = clean
+            station_type.min_hz = low
+            station_type.max_hz = high
+            session.flush()
+            return station_type
+
+    @staticmethod
+    def delete(type_id: int) -> None:
+        with session_scope() as session:
+            station_type = session.get(StationType, type_id)
+            if station_type is None:
+                raise ServiceError("Tipo de equipo no encontrado.")
+            # The ORM only clears link rows for relationships it knows from
+            # this side, and types do not list their stations.
+            session.execute(
+                station_type_links.delete().where(station_type_links.c.type_id == type_id)
+            )
+            session.delete(station_type)
+
+    @staticmethod
+    def resolve(text: str) -> list[int]:
+        """Type ids for a comma separated list of names, case insensitive.
+
+        Raises:
+            ServiceError: naming a type that does not exist.
+        """
+        known = {t.name.lower(): t.id for t in StationTypeService.list_all()}
+        ids: list[int] = []
+        for raw in text.replace(";", ",").split(","):
+            name = raw.strip()
+            if not name:
+                continue
+            type_id = known.get(name.lower())
+            if type_id is None:
+                raise ServiceError(
+                    f"No existe el tipo «{name}». Se crean en Alt+C → Tipos de equipo."
+                )
+            if type_id not in ids:
+                ids.append(type_id)
+        return ids
+
+
+class AntennaService:
+    """Antennas and the amateur bands each one works on."""
+
+    @staticmethod
+    def list_all() -> list[Antenna]:
+        with session_scope() as session:
+            return list(session.scalars(select(Antenna).order_by(Antenna.name)))
+
+    @staticmethod
+    def get(antenna_id: int) -> Antenna | None:
+        with session_scope() as session:
+            return session.get(Antenna, antenna_id)
+
+    @staticmethod
+    def create(name: str, bands: list[str] | None = None, notes: str = "") -> Antenna:
+        clean = _antenna_name(name)
+        with session_scope() as session:
+            if _antenna_named(session, clean) is not None:
+                raise ServiceError(f"Ya existe la antena «{clean}».")
+            antenna = Antenna(name=clean, bands=list(bands or []), notes=notes.strip())
+            session.add(antenna)
+            session.flush()
+            return antenna
+
+    @staticmethod
+    def update(antenna_id: int, name: str, bands: list[str], notes: str = "") -> Antenna:
+        clean = _antenna_name(name)
+        with session_scope() as session:
+            antenna = session.get(Antenna, antenna_id)
+            if antenna is None:
+                raise ServiceError("Antena no encontrada.")
+            other = _antenna_named(session, clean)
+            if other is not None and other.id != antenna_id:
+                raise ServiceError(f"Ya existe la antena «{clean}».")
+            antenna.name = clean
+            antenna.bands = list(bands)
+            antenna.notes = notes.strip()
+            session.flush()
+            return antenna
+
+    @staticmethod
+    def delete(antenna_id: int) -> None:
+        with session_scope() as session:
+            antenna = session.get(Antenna, antenna_id)
+            if antenna is None:
+                raise ServiceError("Antena no encontrada.")
+            # Past QSOs keep their contact, only the antenna reference goes.
+            session.query(Qso).filter(Qso.antenna_id == antenna_id).update({"antenna_id": None})
+            session.execute(
+                station_antenna_links.delete().where(
+                    station_antenna_links.c.antenna_id == antenna_id
+                )
+            )
+            session.delete(antenna)
+
+    @staticmethod
+    def resolve_bands(text: str) -> list[str]:
+        """Band names for a comma separated list, in the plan's order.
+
+        Raises:
+            ServiceError: naming something that is not an amateur band.
+        """
+        found: list[str] = []
+        for raw in text.replace(";", ",").split(","):
+            name = raw.strip()
+            if not name:
+                continue
+            band = bands.get(name)
+            if band is None:
+                raise ServiceError(f"«{name}» no es una banda conocida (2m, 70cm, 20m...).")
+            if band.name not in found:
+                found.append(band.name)
+        order = [band.name for band in bands.BANDS]
+        return sorted(found, key=order.index)
+
+
+def _antenna_name(name: str) -> str:
+    clean = name.strip()
+    if not clean:
+        raise ServiceError("El nombre de la antena no puede estar vacío.")
+    return clean
+
+
+def _antenna_named(session: Any, name: str) -> Antenna | None:
+    return session.scalars(
+        select(Antenna).where(func.lower(Antenna.name) == name.lower())
+    ).first()
+
+
+def _validate_type(name: str, min_hz: int | None, max_hz: int | None) -> tuple[str, int, int]:
+    clean = name.strip()
+    if not clean:
+        raise ServiceError("El nombre del tipo no puede estar vacío.")
+    if min_hz is None or max_hz is None:
+        raise ServiceError("Hacen falta la frecuencia mínima y la máxima.")
+    if min_hz <= 0 or min_hz >= max_hz:
+        raise ServiceError("La frecuencia mínima debe ser positiva y menor que la máxima.")
+    return clean, min_hz, max_hz
+
+
+def _type_named(session: Any, name: str) -> StationType | None:
+    return session.scalars(
+        select(StationType).where(func.lower(StationType.name) == name.lower())
+    ).first()
 
 
 # --------------------------------------------------------------------------- #
@@ -183,7 +426,7 @@ class StationService:
 # --------------------------------------------------------------------------- #
 
 class RepeaterService:
-    """Repeaters the operator works through, selected with F9."""
+    """Repeaters the operator works through, selected with Alt+T."""
 
     @staticmethod
     def list_all(include_inactive: bool = False) -> list[Repeater]:
@@ -335,20 +578,26 @@ class RepeaterService:
 # --------------------------------------------------------------------------- #
 
 class ProfileService:
-    """Saved configurations recalled with F7."""
+    """Saved configurations, assigned to stations and recalled with Alt+P.
+
+    The operator calls them «configuraciones»; the name ``Profile`` predates
+    the split between stations and what is tuned on them.
+    """
+
+    @staticmethod
+    def _query():  # type: ignore[no-untyped-def]
+        return select(Profile).options(
+            joinedload(Profile.operator),
+            joinedload(Profile.repeater),
+            selectinload(Profile.stations),
+        )
 
     @staticmethod
     def list_all() -> list[Profile]:
         with session_scope() as session:
             return list(
                 session.scalars(
-                    select(Profile)
-                    .options(
-                        joinedload(Profile.operator),
-                        joinedload(Profile.station),
-                        joinedload(Profile.repeater),
-                    )
-                    .order_by(Profile.is_default.desc(), Profile.name)
+                    ProfileService._query().order_by(Profile.is_default.desc(), Profile.name)
                 )
             )
 
@@ -356,13 +605,7 @@ class ProfileService:
     def get(profile_id: int) -> Profile | None:
         with session_scope() as session:
             return session.scalars(
-                select(Profile)
-                .options(
-                    joinedload(Profile.operator),
-                    joinedload(Profile.station),
-                    joinedload(Profile.repeater),
-                )
-                .where(Profile.id == profile_id)
+                ProfileService._query().where(Profile.id == profile_id)
             ).first()
 
     @staticmethod
@@ -371,20 +614,73 @@ class ProfileService:
             return session.scalars(select(Profile).where(Profile.is_default.is_(True))).first()
 
     @staticmethod
-    def save_from_state(name: str, state: SessionState, *, overwrite: bool = False) -> Profile:
-        """Store the current working configuration under ``name``."""
+    def for_station(station_id: int, antenna_id: int | None = None) -> list[Profile]:
+        """Configurations assigned to a station, by name.
+
+        With ``antenna_id``, only those on a band the antenna works on.
+        """
+        with session_scope() as session:
+            profiles = list(
+                session.scalars(
+                    ProfileService._query()
+                    .join(station_profile_links)
+                    .where(station_profile_links.c.station_id == station_id)
+                    .order_by(Profile.name)
+                )
+            )
+            antenna = session.get(Antenna, antenna_id) if antenna_id else None
+        if antenna is None:
+            return profiles
+        return [profile for profile in profiles if antenna.covers_band(profile.band)]
+
+    @staticmethod
+    def unassigned() -> list[Profile]:
+        """Configurations no station offers yet."""
+        with session_scope() as session:
+            assigned = select(station_profile_links.c.profile_id)
+            return list(
+                session.scalars(
+                    ProfileService._query()
+                    .where(Profile.id.not_in(assigned))
+                    .order_by(Profile.name)
+                )
+            )
+
+    @staticmethod
+    def save_from_state(
+        name: str,
+        state: SessionState,
+        *,
+        overwrite: bool = False,
+        station_id: int | None = None,
+        antenna_id: int | None = None,
+    ) -> Profile:
+        """Store the current working configuration under ``name``.
+
+        With ``station_id`` the configuration is also assigned to that
+        station, and refused if the station cannot tune it or, when
+        ``antenna_id`` is given too, if that antenna does not work on its band.
+        """
         clean = name.strip()
         if not clean:
-            raise ServiceError("El nombre del perfil no puede estar vacío.")
+            raise ServiceError("El nombre de la configuración no puede estar vacío.")
         with session_scope() as session:
             profile = session.scalars(select(Profile).where(Profile.name == clean)).first()
             if profile is not None and not overwrite:
-                raise ServiceError(f"Ya existe el perfil «{clean}».")
+                raise ServiceError(f"Ya existe la configuración «{clean}».")
+            station = _station_for_assignment(session, station_id) if station_id else None
+            if station is not None:
+                _check_covers(station, clean, state.freq_hz)
+            antenna = session.get(Antenna, antenna_id) if antenna_id else None
+            if antenna is not None and not antenna.covers_band(state.band):
+                raise ServiceError(
+                    f"La antena «{antenna.name}» no trabaja en {state.band} "
+                    f"({antenna.band_names})."
+                )
             if profile is None:
                 profile = Profile(name=clean)
                 session.add(profile)
             profile.operator_id = state.operator_id
-            profile.station_id = state.station_id
             profile.repeater_id = state.repeater_id
             profile.band = state.band
             profile.freq_hz = state.freq_hz
@@ -392,17 +688,76 @@ class ProfileService:
             profile.digital_data = dict(state.digital_data)
             profile.field_order = list(state.field_order)
             profile.separator = state.separator
+            if station is not None and station not in profile.stations:
+                profile.stations.append(station)
             session.flush()
             return profile
 
     @staticmethod
-    def apply_to_state(profile_id: int, state: SessionState) -> SessionState:
-        """Overwrite ``state`` in place with a stored profile."""
+    def rename(profile_id: int, name: str) -> Profile:
+        clean = name.strip()
+        if not clean:
+            raise ServiceError("El nombre de la configuración no puede estar vacío.")
+        with session_scope() as session:
+            profile = session.get(Profile, profile_id)
+            if profile is None:
+                raise ServiceError("Configuración no encontrada.")
+            other = session.scalars(select(Profile).where(Profile.name == clean)).first()
+            if other is not None and other.id != profile_id:
+                raise ServiceError(f"Ya existe la configuración «{clean}».")
+            profile.name = clean
+            session.flush()
+            return profile
+
+    @staticmethod
+    def assign(profile_id: int, station_id: int) -> None:
+        """Offer a configuration under a station.
+
+        Raises:
+            ServiceError: the configuration is tuned outside every type of
+                the station.
+        """
+        with session_scope() as session:
+            profile = session.get(Profile, profile_id)
+            if profile is None:
+                raise ServiceError("Configuración no encontrada.")
+            station = _station_for_assignment(session, station_id)
+            _check_covers(station, profile.name, profile.freq_hz)
+            if station not in profile.stations:
+                profile.stations.append(station)
+
+    @staticmethod
+    def unassign(profile_id: int, station_id: int) -> None:
+        """Stop offering a configuration under a station; it is not deleted."""
+        with session_scope() as session:
+            session.execute(
+                station_profile_links.delete().where(
+                    station_profile_links.c.profile_id == profile_id,
+                    station_profile_links.c.station_id == station_id,
+                )
+            )
+
+    @staticmethod
+    def apply_to_state(
+        profile_id: int,
+        state: SessionState,
+        *,
+        station_id: int | None = None,
+        antenna_id: int | None = None,
+    ) -> SessionState:
+        """Overwrite ``state`` in place with a stored configuration.
+
+        The station and antenna are only changed when a station is given: a
+        configuration is shared between stations, so on its own it does not
+        say which.
+        """
         profile = ProfileService.get(profile_id)
         if profile is None:
-            raise ServiceError("Perfil no encontrado.")
+            raise ServiceError("Configuración no encontrada.")
         state.operator_id = profile.operator_id or state.operator_id
-        state.station_id = profile.station_id
+        if station_id is not None:
+            state.station_id = station_id
+            state.antenna_id = antenna_id
         state.band = profile.band
         state.freq_hz = profile.freq_hz
         state.mode = profile.mode or modes.DEFAULT_MODE
@@ -427,7 +782,7 @@ class ProfileService:
             session.query(Profile).update({"is_default": False})
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Perfil no encontrado.")
+                raise ServiceError("Configuración no encontrada.")
             profile.is_default = True
 
     @staticmethod
@@ -435,8 +790,25 @@ class ProfileService:
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Perfil no encontrado.")
+                raise ServiceError("Configuración no encontrada.")
             session.delete(profile)
+
+
+def _station_for_assignment(session: Any, station_id: int) -> Station:
+    station = session.scalars(
+        select(Station).options(selectinload(Station.types)).where(Station.id == station_id)
+    ).first()
+    if station is None:
+        raise ServiceError("Equipo no encontrado.")
+    return station
+
+
+def _check_covers(station: Station, profile_name: str, freq_hz: int | None) -> None:
+    if not station.covers(freq_hz):
+        raise ServiceError(
+            f"«{profile_name}» ({bands.format_frequency(freq_hz)}) queda fuera de los "
+            f"tipos de «{station.name}» ({station.type_names})."
+        )
 
 
 # --------------------------------------------------------------------------- #
@@ -497,6 +869,7 @@ def _to_row(qso: Qso) -> QsoRow:
         operator_callsign=qso.operator.callsign if qso.operator else "",
         station_name=qso.station.name if qso.station else "",
         repeater_call=qso.repeater_call or "",
+        antenna_name=qso.antenna.name if qso.antenna else "",
         digital_data=dict(qso.digital_data or {}),
     )
 
@@ -583,7 +956,7 @@ class QsoService:
             The stored contact as a QsoRow.
         """
         if state.operator_id is None:
-            raise ServiceError("No hay operador seleccionado. Configúralo con F10.")
+            raise ServiceError("No hay operador seleccionado. Configúralo con Alt+C.")
 
         call_raw = str(fields.get("call", "")).strip()
         if not call_raw:
@@ -617,6 +990,7 @@ class QsoService:
             qso = Qso(
                 operator_id=state.operator_id,
                 station_id=state.station_id,
+                antenna_id=state.antenna_id,
                 repeater_id=repeater_id,
                 repeater_call=repeater_call,
                 call=callsign_module.normalize(call_raw),
@@ -645,6 +1019,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .where(Qso.id == qso.id)
@@ -664,6 +1039,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .order_by(Qso.qso_utc.desc(), Qso.id.desc())
@@ -690,6 +1066,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .order_by(Qso.qso_utc.desc(), Qso.id.desc())
@@ -723,6 +1100,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .where(Qso.id == qso_id)
@@ -779,6 +1157,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .where(Qso.id == qso.id)
@@ -809,6 +1188,7 @@ class QsoService:
                 .options(
                     joinedload(Qso.operator),
                     joinedload(Qso.station),
+                    joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
                 )
                 .where(Qso.base_call == base)

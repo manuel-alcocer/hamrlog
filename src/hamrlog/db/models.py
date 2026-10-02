@@ -21,13 +21,16 @@ from typing import Any
 
 from sqlalchemy import (
     JSON,
+    BigInteger,
     Boolean,
+    Column,
     DateTime,
     Enum,
     ForeignKey,
     Index,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
 )
@@ -75,28 +78,143 @@ class Operator(Base):
         return f"{self.callsign} ({self.name})" if self.name else self.callsign
 
 
+#: Which frequency ranges a station covers. A station may have several types:
+#: an IC-705 is HF, VHF and UHF at once.
+station_type_links = Table(
+    "station_type_links",
+    Base.metadata,
+    Column("station_id", ForeignKey("stations.id", ondelete="CASCADE"), primary_key=True),
+    Column("type_id", ForeignKey("station_types.id", ondelete="CASCADE"), primary_key=True),
+)
+
+#: Configurations offered under each station in Alt+P. Assigned by hand, so
+#: two stations with the same rig can offer different configurations, and one
+#: configuration can be reused by several stations.
+station_profile_links = Table(
+    "station_profile_links",
+    Base.metadata,
+    Column("station_id", ForeignKey("stations.id", ondelete="CASCADE"), primary_key=True),
+    Column("profile_id", ForeignKey("profiles.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+#: Antennas that can be connected to each station. Assigned by hand: a
+#: handheld's own antenna only fits that handheld, whatever its bands.
+station_antenna_links = Table(
+    "station_antenna_links",
+    Base.metadata,
+    Column("station_id", ForeignKey("stations.id", ondelete="CASCADE"), primary_key=True),
+    Column("antenna_id", ForeignKey("antennas.id", ondelete="CASCADE"), primary_key=True),
+)
+
+
+class Antenna(Base):
+    """An antenna and the amateur bands it works on.
+
+    Stations list the antennas they can use, and in Alt+P an antenna only
+    offers the configurations on one of its bands.
+    """
+
+    __tablename__ = "antennas"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    #: ADIF band names, e.g. ["2m", "70cm"]. Empty means not stated.
+    bands: Mapped[list[str]] = mapped_column(default=list)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Antenna {self.name}>"
+
+    @property
+    def band_names(self) -> str:
+        return ", ".join(self.bands or [])
+
+    def covers_band(self, band: str | None) -> bool:
+        """Whether the antenna works on a band.
+
+        An antenna with no bands stated, or a configuration with no band, has
+        nothing to check against, so both are accepted.
+        """
+        if not band or not self.bands:
+            return True
+        return band.lower() in {name.lower() for name in self.bands}
+
+
+class StationType(Base):
+    """A class of station defined by the frequencies it covers: HF, VHF, CB...
+
+    The range decides which configurations a station can be given: one tuned
+    outside every type of the station would be a configuration it cannot use.
+    """
+
+    __tablename__ = "station_types"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    # BigInteger: UHF ends at 3 GHz, past a 32-bit PostgreSQL integer.
+    min_hz: Mapped[int] = mapped_column(BigInteger)
+    max_hz: Mapped[int] = mapped_column(BigInteger)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<StationType {self.name}>"
+
+    def contains(self, freq_hz: int) -> bool:
+        return self.min_hz <= freq_hz <= self.max_hz
+
+
 class Station(Base):
-    """A radio setup: rig plus antenna, selected with F6."""
+    """A rig, selected with Alt+E together with one of its antennas."""
 
     __tablename__ = "stations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     rig: Mapped[str] = mapped_column(String(120), default="")
+    #: Legacy: the antenna as free text, before schema 5 made antennas their
+    #: own table. Only read by the upgrade; no longer written.
     antenna: Mapped[str] = mapped_column(String(120), default="")
     power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
+    types: Mapped[list[StationType]] = relationship(
+        secondary=station_type_links, order_by="StationType.min_hz"
+    )
+    profiles: Mapped[list[Profile]] = relationship(
+        secondary=station_profile_links, order_by="Profile.name", back_populates="stations"
+    )
+    antennas: Mapped[list[Antenna]] = relationship(
+        secondary=station_antenna_links, order_by="Antenna.name"
+    )
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Station {self.name}>"
 
     @property
-    def summary(self) -> str:
-        parts = [part for part in (self.rig, self.antenna) if part]
+    def type_names(self) -> str:
+        return ", ".join(station_type.name for station_type in self.types)
+
+    def covers(self, freq_hz: int | None) -> bool:
+        """Whether a frequency falls in the range of any of the station's types.
+
+        A station with no types, or a configuration with no frequency, has
+        nothing to check against, so both are accepted.
+        """
+        if freq_hz is None or not self.types:
+            return True
+        return any(station_type.contains(freq_hz) for station_type in self.types)
+
+    def summary(self, antenna: Antenna | None = None) -> str:
+        """Rig, antenna in use and power, for the status line."""
+        parts = [self.rig or self.name]
+        if antenna is not None:
+            parts.append(antenna.name)
         if self.power_w:
             parts.append(f"{self.power_w} W")
-        return " / ".join(parts) if parts else self.name
+        return " / ".join(parts)
 
 
 class Contact(Base):
@@ -197,7 +315,12 @@ class Repeater(Base):
 
 
 class Profile(Base):
-    """A saved snapshot of the working configuration, recalled with F7."""
+    """A saved snapshot of the working configuration, recalled with Alt+P.
+
+    Shown to the operator as a «configuración». It is not tied to one station:
+    stations list the configurations assigned to them, and Alt+P loads the
+    pair.
+    """
 
     __tablename__ = "profiles"
 
@@ -205,6 +328,8 @@ class Profile(Base):
     name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
 
     operator_id: Mapped[int | None] = mapped_column(ForeignKey("operators.id"), nullable=True)
+    #: Legacy: the single station a profile carried before schema 4. Only read
+    #: by the upgrade that turns it into an assignment; no longer written.
     station_id: Mapped[int | None] = mapped_column(ForeignKey("stations.id"), nullable=True)
     repeater_id: Mapped[int | None] = mapped_column(ForeignKey("repeaters.id"), nullable=True)
 
@@ -222,8 +347,10 @@ class Profile(Base):
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
     operator: Mapped[Operator | None] = relationship()
-    station: Mapped[Station | None] = relationship()
     repeater: Mapped[Repeater | None] = relationship()
+    stations: Mapped[list[Station]] = relationship(
+        secondary=station_profile_links, order_by="Station.name", back_populates="profiles"
+    )
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Profile {self.name}>"
@@ -242,6 +369,7 @@ class Qso(Base):
 
     operator_id: Mapped[int] = mapped_column(ForeignKey("operators.id"), index=True)
     station_id: Mapped[int | None] = mapped_column(ForeignKey("stations.id"), nullable=True)
+    antenna_id: Mapped[int | None] = mapped_column(ForeignKey("antennas.id"), nullable=True)
     repeater_id: Mapped[int | None] = mapped_column(ForeignKey("repeaters.id"), nullable=True)
     #: Repeater callsign copied here so the contact keeps its history even if
     #: the repeater is later deleted from the list.
@@ -286,6 +414,7 @@ class Qso(Base):
 
     operator: Mapped[Operator] = relationship(back_populates="qsos")
     station: Mapped[Station | None] = relationship()
+    antenna: Mapped[Antenna | None] = relationship()
     repeater: Mapped[Repeater | None] = relationship()
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -325,4 +454,6 @@ class SchemaVersion(Base):
 #: Bumped whenever models change in a way that needs a data migration.
 #: 2 added the repeaters table and the repeater columns on qsos and profiles.
 #: 3 added the contacts address book.
-CURRENT_SCHEMA_VERSION = 3
+#: 4 added station types and the station to configuration assignments.
+#: 5 made antennas a table of their own, assigned to stations, with bands.
+CURRENT_SCHEMA_VERSION = 5

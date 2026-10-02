@@ -8,11 +8,14 @@ import pytest
 
 from hamrlog.core.entry import parse
 from hamrlog.core.services import (
+    AntennaService,
+    OperatorService,
     ProfileService,
     QsoService,
     ServiceError,
     SettingsService,
     StationService,
+    StationTypeService,
 )
 from hamrlog.core.state import SessionState
 
@@ -141,6 +144,12 @@ def test_profiles_round_trip_the_session_state(state):
     assert restored.freq_hz == state.freq_hz
     assert restored.mode == "DMR"
     assert restored.digital_data == {"talkgroup": "21466", "network": "Brandmeister"}
+    # A configuration is shared between stations, so alone it keeps the
+    # station untouched; loading it from under a station selects that one.
+    assert restored.station_id is None
+    ProfileService.apply_to_state(
+        ProfileService.list_all()[0].id, restored, station_id=state.station_id
+    )
     assert restored.station_id == state.station_id
 
 
@@ -185,3 +194,178 @@ def test_changing_mode_drops_stale_digital_values(state):
     state.digital_data = {"talkgroup": "214"}
     state.set_mode("SSB")
     assert state.digital_data == {}
+
+
+# --------------------------------------------------------------------------- #
+# Station types and configurations per station
+# --------------------------------------------------------------------------- #
+
+def test_new_databases_start_with_the_usual_station_types():
+    names = [station_type.name for station_type in StationTypeService.list_all()]
+    assert names == ["HF", "CB", "VHF", "UHF"]
+
+
+def test_station_types_need_a_valid_range():
+    with pytest.raises(ServiceError, match="menor que la máxima"):
+        StationTypeService.create("SHF", 10_000_000_000, 3_000_000_000)
+    with pytest.raises(ServiceError, match="Ya existe"):
+        StationTypeService.create("hf", 1_000_000, 2_000_000)
+    created = StationTypeService.create("6m", 50_000_000, 54_000_000)
+    assert StationTypeService.resolve("HF, 6M") == [
+        StationTypeService.list_all()[0].id, created.id
+    ]
+    with pytest.raises(ServiceError, match="No existe el tipo"):
+        StationTypeService.resolve("HF, SHF")
+
+
+def test_a_station_only_takes_configurations_it_can_tune(state):
+    hf_vhf = StationService.create(
+        "IC-705 Sevilla", rig="IC-705", type_ids=StationTypeService.resolve("HF, VHF")
+    )
+    cb = StationService.create("CB base", type_ids=StationTypeService.resolve("CB"))
+
+    forty = ProfileService.save_from_state("40m SSB", state)
+    ProfileService.assign(forty.id, hf_vhf.id)
+    with pytest.raises(ServiceError, match="queda fuera"):
+        ProfileService.assign(forty.id, cb.id)
+
+    assert [p.name for p in ProfileService.for_station(hf_vhf.id)] == ["40m SSB"]
+    assert ProfileService.for_station(cb.id) == []
+
+    # Saving under a station refuses before storing anything.
+    with pytest.raises(ServiceError, match="queda fuera"):
+        ProfileService.save_from_state("otra", state, station_id=cb.id)
+    assert [p.name for p in ProfileService.list_all()] == ["40m SSB"]
+
+
+def test_configurations_are_reused_between_stations(state):
+    sevilla = StationService.create("IC-705 Sevilla")
+    nueva = StationService.create("IC-705 Nueva")
+    shared = ProfileService.save_from_state("20m", state, station_id=sevilla.id)
+    ProfileService.assign(shared.id, nueva.id)
+    assert {s.name for s in ProfileService.get(shared.id).stations} == {
+        "IC-705 Sevilla", "IC-705 Nueva"
+    }
+
+    # Unassigning, and deleting a station, leave the configuration alone.
+    ProfileService.unassign(shared.id, nueva.id)
+    assert ProfileService.for_station(nueva.id) == []
+    StationService.delete(sevilla.id)
+    assert ProfileService.get(shared.id) is not None
+    assert [p.name for p in ProfileService.unassigned()] == ["20m"]
+
+
+def test_deleting_a_type_frees_its_stations():
+    vhf = StationTypeService.list_all()[2]
+    station = StationService.create("FT-65", type_ids=[vhf.id])
+    StationTypeService.delete(vhf.id)
+    assert StationService.get(station.id).types == []
+
+
+def test_upgrading_a_v3_database_assigns_profiles_to_their_station(tmp_path):
+    """Before schema 4 a profile carried one station; it becomes an assignment."""
+    import sqlite3
+
+    from hamrlog.db import session as db_session
+
+    url = f"sqlite:///{(tmp_path / 'old.sqlite3').as_posix()}"
+    db_session.dispose()
+    db_session.init_engine(url)
+    station = StationService.create("HF-Casa")
+    loose = ProfileService.save_from_state("suelta", SessionState())
+    tied = ProfileService.save_from_state("atada", SessionState())
+    db_session.dispose()
+
+    # Turn it back into what version 3 left behind.
+    with sqlite3.connect(tmp_path / "old.sqlite3") as connection:
+        connection.execute("DELETE FROM station_profile_links")
+        connection.execute("DELETE FROM station_types")
+        connection.execute("UPDATE profiles SET station_id = ? WHERE id = ?", (station.id, tied.id))
+        connection.execute("UPDATE schema_version SET version = 3")
+
+    db_session.init_engine(url)
+    assert [p.name for p in ProfileService.for_station(station.id)] == ["atada"]
+    assert [p.name for p in ProfileService.unassigned()] == [loose.name]
+    assert len(StationTypeService.list_all()) == 4
+
+
+# --------------------------------------------------------------------------- #
+# Antennas
+# --------------------------------------------------------------------------- #
+
+def test_antenna_bands_are_amateur_bands_in_plan_order():
+    assert AntennaService.resolve_bands("70CM, 2m, 2m") == ["2m", "70cm"]
+    with pytest.raises(ServiceError, match="no es una banda"):
+        AntennaService.resolve_bands("2m, VHF")
+
+
+def test_an_antenna_narrows_the_configurations_of_its_station(state):
+    rig = StationService.create("ICOM IC-705")
+    x300 = AntennaService.create("Diamond X300N", ["2m", "70cm"])
+    anything = AntennaService.create("Sin bandas")
+    forty = ProfileService.save_from_state("40m SSB", state, station_id=rig.id)
+    state.set_band("2m")
+    ProfileService.save_from_state("2m FM", state, station_id=rig.id)
+
+    def names(antenna_id):
+        return [p.name for p in ProfileService.for_station(rig.id, antenna_id)]
+
+    assert names(x300.id) == ["2m FM"]
+    assert names(anything.id) == ["2m FM", "40m SSB"]
+    assert names(None) == ["2m FM", "40m SSB"]
+
+    # Saving under an antenna that does not work on the band is refused.
+    state.set_band("40m")
+    with pytest.raises(ServiceError, match="no trabaja en 40m"):
+        ProfileService.save_from_state(
+            "otra", state, station_id=rig.id, antenna_id=x300.id
+        )
+    assert ProfileService.get(forty.id).band == "40m"
+
+
+def test_antennas_are_shared_and_deleting_one_keeps_the_log(state):
+    other = StationService.create("Kenwood TM-241E")
+    dipolo = StationService.get(state.station_id).antennas[0]
+    StationService.assign_antenna(other.id, dipolo.id)
+    assert [a.name for a in StationService.get(other.id).antennas] == ["Dipolo"]
+
+    row = log_line("ea4abc", state)
+    assert row.antenna_name == "Dipolo"
+    AntennaService.delete(dipolo.id)
+    assert StationService.get(other.id).antennas == []
+    assert QsoService.recent()[-1].antenna_name == ""
+
+
+def test_upgrading_a_v4_database_moves_antennas_to_their_own_table(tmp_path):
+    """Before schema 5 the antenna was a text column of the station."""
+    import sqlite3
+
+    from hamrlog.db import session as db_session
+
+    url = f"sqlite:///{(tmp_path / 'old.sqlite3').as_posix()}"
+    db_session.dispose()
+    db_session.init_engine(url)
+    sg = StationService.create("AT-878UV · SG7900")
+    tm = StationService.create("TM-241E · SG7900")
+    bare = StationService.create("IC-705")
+    operator = OperatorService.create("EA7WM")
+    state = SessionState(operator_id=operator.id, station_id=sg.id)
+    state.set_band("2m")
+    log_line("ea4abc", state)
+    db_session.dispose()
+
+    with sqlite3.connect(tmp_path / "old.sqlite3") as connection:
+        connection.execute("DELETE FROM station_antenna_links")
+        connection.execute("DELETE FROM antennas")
+        connection.execute("UPDATE qsos SET antenna_id = NULL")
+        connection.execute(
+            "UPDATE stations SET antenna = 'Diamond SG7900' WHERE id IN (?, ?)", (sg.id, tm.id)
+        )
+        connection.execute("UPDATE schema_version SET version = 4")
+
+    db_session.init_engine(url)
+    assert [a.name for a in AntennaService.list_all()] == ["Diamond SG7900"]
+    assert [a.name for a in StationService.get(sg.id).antennas] == ["Diamond SG7900"]
+    assert [a.name for a in StationService.get(tm.id).antennas] == ["Diamond SG7900"]
+    assert StationService.get(bare.id).antennas == []
+    assert QsoService.recent()[-1].antenna_name == "Diamond SG7900"

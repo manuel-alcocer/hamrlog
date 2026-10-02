@@ -34,6 +34,7 @@ class QsoRow:
     operator_callsign: str
     station_name: str
     repeater_call: str = ""
+    antenna_name: str = ""
     digital_data: dict[str, Any] = field(default_factory=dict)
 
     @property

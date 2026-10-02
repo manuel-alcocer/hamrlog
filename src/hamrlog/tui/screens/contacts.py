@@ -1,7 +1,7 @@
-"""F8: the contacts — the address book.
+"""Alt+O: the contacts — the address book.
 
 Who each callsign belongs to: name, town, DMR ID and how many QSOs the log
-holds with them. What was worked and when is the log (F1); this answers who
+holds with them. What was worked and when is the log (Alt+R); this answers who
 they are.
 """
 
@@ -14,7 +14,6 @@ from textual import on, work
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
 from textual.widgets import DataTable, Input, Label, Static
 
 from ...core import contacts as contact_files
@@ -22,7 +21,7 @@ from ...core import transfer
 from ...core.dto import ContactRow
 from ...core.services import ContactService, ServiceError
 from ...paths import export_dir
-from .base import ConfirmScreen, Field, FormScreen
+from .base import ConfirmScreen, Field, FormScreen, PanelScreen
 
 _COLUMNS: tuple[tuple[str, int | None], ...] = (
     ("INDICATIVO", 13),
@@ -36,12 +35,12 @@ _COLUMNS: tuple[tuple[str, int | None], ...] = (
 )
 
 
-class ContactsScreen(ModalScreen[bool]):
+class ContactsScreen(PanelScreen[bool]):
     """The address book. Dismisses True when anything changed."""
 
     BINDINGS = [
         Binding("escape", "close", "Cerrar"),
-        Binding("f8", "close", "Cerrar", show=False),
+        Binding("alt+o", "close", "Cerrar", show=False),
         Binding("ctrl+n", "new", "Nuevo"),
         Binding("ctrl+e", "edit", "Editar"),
         Binding("delete", "remove", "Borrar"),
@@ -57,8 +56,8 @@ class ContactsScreen(ModalScreen[bool]):
         self.changed = False
 
     def compose(self) -> ComposeResult:
-        with Vertical(classes="modal modal-wide"):
-            yield Label("F8 · Contactos", classes="modal-title")
+        with Vertical(classes="modal"):
+            yield Label("Alt+O · Contactos", classes="modal-title")
             with Horizontal(classes="search-row"):
                 yield Input(
                     placeholder="Buscar por indicativo, nombre, ciudad, país o ID DMR...",
@@ -69,7 +68,7 @@ class ContactsScreen(ModalScreen[bool]):
             yield Static("", id="book-result", classes="modal-preview")
             yield Static(
                 "Enter editar · Supr borrar · Ctrl+N nuevo · Ctrl+I importar · "
-                "Ctrl+O exportar · F1 abre el registro · Esc cerrar",
+                "Ctrl+O exportar · Alt+R abre el registro · Esc cerrar",
                 classes="modal-help",
             )
 

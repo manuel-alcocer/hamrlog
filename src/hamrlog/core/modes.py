@@ -25,7 +25,7 @@ class Mode:
         adif_submode: SUBMODE value written to ADIF, empty when not needed.
         category: One of "voice", "cw", "digital_voice", "data".
         default_rst: Report pre-filled when the operator omits it.
-        digital_fields: Extra prompts shown by the F5 screen.
+        digital_fields: Extra prompts asked after picking the mode.
     """
 
     name: str
@@ -80,7 +80,7 @@ ANALOG_MODES: tuple[Mode, ...] = (
     Mode("AM", "AM", "", "voice", "59"),
 )
 
-# Digital voice modes reached through F5.
+# Digital voice modes.
 DIGITAL_VOICE_MODES: tuple[Mode, ...] = (
     Mode("DMR", "DIGITALVOICE", "DMR", "digital_voice", "59", _DMR_FIELDS),
     Mode("DSTAR", "DIGITALVOICE", "DSTAR", "digital_voice", "59", _DSTAR_FIELDS),
@@ -91,7 +91,7 @@ DIGITAL_VOICE_MODES: tuple[Mode, ...] = (
     Mode("ECHOLINK", "FM", "", "digital_voice", "59", _NET_FIELDS),
 )
 
-# Data modes, also reached through F5.
+# Data modes.
 DATA_MODES: tuple[Mode, ...] = (
     Mode("FT8", "FT8", "", "data", "-10"),
     Mode("FT4", "MFSK", "FT4", "data", "-10"),
@@ -174,6 +174,6 @@ def default_rst(mode_name: str | None) -> str:
 
 
 def digital_fields(mode_name: str | None) -> tuple[DigitalField, ...]:
-    """Extra prompts the F5 screen must show for a mode."""
+    """Extra prompts to ask for after picking a mode."""
     mode = get(mode_name)
     return mode.digital_fields if mode else ()

@@ -12,7 +12,7 @@ configuras la banda, la frecuencia, el modo y el equipo una sola vez, y a
 partir de ahí solo escribes el indicativo y pulsas Enter.
 
 ```
- F1 Registro  F2 Banda  F3 Frec  F4 Modo  F5 Config  F6 Equipo  F7 Perfiles  F8 Contactos  F9 Rptr  F10 Menú
+ Registro  Banda  Frec  Modo  Config  Equipo  Perfiles  Contactos  Rptr
  OP EA7WM · BANDA 40m · QRG 7.130.000 · MODO SSB · EQUIPO IC-7300 / Dipolo G5RV · PERFIL HF-Casa
  FECHA HORA           INDICATIVO    NOMBRE      BANDA   FRECUENCIA   MODO     E/R       PAÍS        NOTAS
  2026-09-20 18:42:10  EA4ABC        Juan        40m     7.130.000    SSB      59/57     España      Madrid
@@ -151,7 +151,7 @@ intacto al bajar.
 La última fila del histórico es siempre **`<Insertar nuevo>`**: marca dónde
 aparecerá el próximo QSO, y el cursor vuelve ahí solo después de guardar.
 
-La dirección se elige en **F5 → Histórico**: los nuevos abajo (la lista crece
+La dirección se elige en **Alt+C → Histórico**: los nuevos abajo (la lista crece
 hacia abajo) o los nuevos arriba. `<Insertar nuevo>` acompaña siempre al
 extremo por el que crece.
 
@@ -161,12 +161,6 @@ Todo borrado pregunta antes, y se responde de tres formas: `←` `→` o `Tab`
 mueven entre los botones y `Enter` confirma el señalado, `S` dice que sí, y `N`
 o `Esc` dicen que no. Arranca con **No** seleccionado, para que un Enter por
 inercia no se lleve nada por delante.
-
-### El menú superior
-
-`F10` activa la barra de arriba: `←` `→` la recorren, `Enter` abre lo señalado
-y `Esc` vuelve a la escritura, como en Midnight Commander. Es la salida si tu
-terminal se queda con alguna tecla de función.
 
 ### La línea de entrada
 
@@ -187,7 +181,7 @@ La fecha y la hora UTC se ponen solas. Solo el indicativo es obligatorio: con
 escribirlo y pulsar Enter ya queda registrado, con el informe por defecto del
 modo activo (59 en fonía, 599 en CW, -10 en FT8).
 
-Las casillas y su orden se configuran en **F5 → Entrada rápida**; por defecto
+Las casillas y su orden se configuran en **Alt+C → Entrada rápida**; por defecto
 son `indicativo, nombre, rst_env, rst_rec, qth, notas`. Las comas no separan
 nada: son texto corriente, así que una nota puede llevarlas.
 
@@ -199,26 +193,25 @@ quién es.
 
 | Tecla | Acción |
 |---|---|
-| `F1` | **Registro**: los QSO que llevas hechos |
-| `F2` | Selector de banda (160 m a 3 cm, plan IARU R1) |
-| `F3` | Frecuencia, con detección automática de banda |
-| `F4` | Modo: SSB, CW, FM, AM, DMR, D-STAR, C4FM, M17, FT8, RTTY... todos en una lista |
-| `F5` | Configuración, incluidas la importación y la exportación del registro |
-| `F6` | Equipo: emisora, antena y potencia |
-| `F7` | Perfiles: guardar y recuperar configuraciones completas |
-| `F8` | **Contactos**: la agenda de quién es cada indicativo |
-| `F9` | Repetidor: por dónde sales, y alta de repetidores |
-| `F10` | Menú: recorre la barra superior con `←` `→`, como Midnight Commander |
+| `Alt+R` | **Registro**: los QSO que llevas hechos |
+| `Alt+B` | Selector de banda (160 m a 3 cm, plan IARU R1) |
+| `Alt+F` | Frecuencia, con detección automática de banda |
+| `Alt+M` | Modo: SSB, CW, FM, AM, DMR, D-STAR, C4FM, M17, FT8, RTTY... todos en una lista |
+| `Alt+C` | Configuración, incluidas la importación y la exportación del registro |
+| `Alt+E` | Equipo y, dentro de él, la antena conectada |
+| `Alt+P` | Perfiles: equipo → antena → configuración |
+| `Alt+O` | **Contactos**: la agenda de quién es cada indicativo |
+| `Alt+T` | Repetidor: por dónde sales, y alta de repetidores |
 | `Ctrl+F1` | Ayuda (también `F12`, y `/ayuda`) |
 | `Ctrl+Q` | Salir |
 
-**Registro** (`F1`) y **Contactos** (`F8`) son cosas distintas y deliberadamente
+**Registro** (`Alt+R`) y **Contactos** (`Alt+O`) son cosas distintas y deliberadamente
 separadas: el registro es *qué* has trabajado y cuándo, los contactos son
 *quién* es cada cual. Desde cualquiera de las dos pantallas, la tecla de la
 otra te lleva allí sin apilar ventanas.
 
-Si tu emulador de terminal se queda con alguna tecla de función (`F10` abre el
-menú en varios terminales de Linux), cada atajo tiene su comando equivalente.
+Si tu emulador de terminal se queda con alguna combinación con `Alt`, cada
+atajo tiene su comando equivalente.
 
 ### Comandos
 
@@ -230,7 +223,7 @@ Escritos en la propia línea de entrada:
 | `/frec 14.250` | Fija la frecuencia |
 | `/modo cw` o `/modo dmr` | Cambia de modo, analógico o digital |
 | `/equipo` | Abre el selector de equipo |
-| `/perfil HF-Casa` | Carga un perfil por su nombre |
+| `/perfil 20m` | Carga una configuración por su nombre, sin cambiar de equipo |
 | `/repetidor ED7ZAE` | Sale por ese repetidor sin abrir la lista |
 | `/directo` | Vuelve a simplex |
 | `/registro`, `/log` | El registro de QSO |
@@ -242,7 +235,7 @@ Escritos en la propia línea de entrada:
 
 ### Modos
 
-`F4` lista todos los modos juntos, analógicos y digitales, porque son lo mismo:
+`Alt+M` lista todos los modos juntos, analógicos y digitales, porque son lo mismo:
 cómo estás trabajando. Escribe para filtrar (`dmr`, `digital`, `datos`, `cw`).
 
 Al elegir uno digital se piden los datos que ese modo necesita, y se aplican a
@@ -262,7 +255,7 @@ estándar viajan como `APP_HAMRLOG_TALKGROUP`, `APP_HAMRLOG_NETWORK`, etc.
 
 ### Los contactos (agenda)
 
-`F8` es la agenda: nombre, apellidos, ID DMR, ciudad, provincia, país, locator,
+`Alt+O` es la agenda: nombre, apellidos, ID DMR, ciudad, provincia, país, locator,
 correo y notas, más cuántos QSO llevas con cada estación.
 
 **Se llena sola con lo que trabajas**: al registrar un indicativo que no esté
@@ -275,13 +268,13 @@ De vuelta, al teclear un indicativo conocido aparece quién es bajo la línea de
 entrada, y al pulsar Enter el nombre y el QTH que no hayas escrito se rellenan
 solos. **Lo que tú escribas siempre manda** sobre lo que diga el listín.
 
-Ambas cosas se desactivan en **F5 → Histórico y agenda**. Importar un ADIF no
+Ambas cosas se desactivan en **Alt+C → Histórico y agenda**. Importar un ADIF no
 da de alta contactos: solo lo hace lo que registras en directo, para que un
 fichero de miles de QSO no se convierta en miles de fichas a medias.
 
 #### Importar listas de usuarios DMR
 
-`Ctrl+I` desde `F8`, o `hamrlog contacts import`. El formato se detecta
+`Ctrl+I` desde `Alt+O`, o `hamrlog contacts import`. El formato se detecta
 solo, así que no hay que convertir nada:
 
 | Origen | Qué se reconoce |
@@ -308,7 +301,7 @@ indicativo, rellena lo que falte y nunca pisa un dato escrito a mano.
 
 #### Exportar a la radio
 
-`Ctrl+O` desde `F8`, o por línea de órdenes:
+`Ctrl+O` desde `Alt+O`, o por línea de órdenes:
 
 ```bash
 hamrlog contacts export contactos.csv --format anytone
@@ -325,12 +318,12 @@ puede usarlos.
 
 ### Repetidores
 
-`F9` decide por dónde sale tu señal: directo (simplex) o por un repetidor dado
+`Alt+T` decide por dónde sale tu señal: directo (simplex) o por un repetidor dado
 de alta. Al elegir uno se adopta todo lo que define —frecuencia de escucha y de
 transmisión, banda, modo y sus parámetros digitales— y puedes volver a registrar
 contactos de inmediato.
 
-Para dar uno de alta, `F9` y luego `N`. Lo único imprescindible es el indicativo
+Para dar uno de alta, `Alt+T` y luego `N`. Lo único imprescindible es el indicativo
 y la frecuencia de salida, la que sintonizas:
 
 | Campo | Ejemplo | Notas |
@@ -346,7 +339,7 @@ y la frecuencia de salida, la que sintonizas:
 Si el modo es digital se piden después sus parámetros: color code y talkgroup en
 DMR, reflector en D-STAR, room de Wires-X en C4FM.
 
-Cambiar de banda o de frecuencia a mano (`F2`, `F3`) te saca del repetidor,
+Cambiar de banda o de frecuencia a mano (`Alt+B`, `Alt+F`) te saca del repetidor,
 porque dejan de describir dónde trabajas. Se vuelve a simplex con `D` en la
 lista o con `/directo`.
 
@@ -357,25 +350,67 @@ repetidor viaja en `APP_HAMRLOG_REPEATER` y se conserva al reimportar.
 
 ### Perfiles
 
-Un perfil guarda la configuración completa: operador, equipo, repetidor, banda,
-frecuencia, modo, datos del modo digital y el formato de la línea de entrada.
-En `F7`, la tecla `G` guarda la configuración actual como un perfil nuevo, `S`
-sobrescribe el seleccionado y `D` lo marca como predeterminado para que se
-cargue solo al arrancar.
+Los perfiles tienen tres niveles: **equipo**, **antena** y **configuración**.
+`Alt+P` los muestra en tres columnas, cada una con lo que pertenece a lo
+señalado en la anterior:
+
+```
+ Equipos                  Antenas · ICOM IC-705     Configuraciones
+   Anytone AT-878UV         Diamond SG7900 2m,70cm    Terminal Mode INT  2m · DMR
+ ▸ ICOM IC-705            ▸ Diamond X300N  2m,70cm
+   Sin equipo               Sin antena
+```
+
+`↑` `↓` se mueven dentro de una columna, `→` (o `Enter`) pasa a la siguiente,
+`←` vuelve y `Enter` sobre una configuración carga las tres cosas a la vez: la
+emisora, la antena conectada y lo que tiene sintonizado. En la columna de
+configuraciones, `G` guarda la actual en ese equipo, `A` le asigna una que ya
+exista, `S` sobrescribe la señalada y `Supr` la quita de ese equipo sin
+borrarla.
+
+Una configuración guarda banda, frecuencia, modo, datos del modo digital,
+repetidor y formato de la línea de entrada. **Se reutilizan entre equipos**: la
+misma puede estar asignada a varios. Todas juntas se gestionan en
+**Alt+C → Configuraciones** (renombrar, borrar, marcar la que se carga al
+arrancar). «Sin equipo» reúne las que aún no tiene ninguno.
+
+**Antenas.** Se crean en **Alt+C → Antenas**, cada una con las bandas de
+radioaficionado en las que trabaja (`2m, 70cm`). En `Alt+E` cada equipo tiene su
+submenú de antenas: `→` entra, `A` le conecta una antena y `Supr` la quita. Una
+antena puede estar en varios equipos (una X300N sirve para cualquier emisora de
+VHF/UHF), y se asignan a mano para que la antena de un walkie solo salga en
+ese walkie. En `Alt+P`, bajo cada antena solo aparecen las configuraciones de
+sus bandas. Cada QSO guarda el equipo y la antena, y se exportan como `MY_RIG` y
+`MY_ANTENNA`.
+
+**Tipos de equipo.** Cada equipo tiene uno o varios (un IC-705 es HF, VHF y
+UHF), que se escriben en su ficha de `Alt+E`. Un tipo es un rango de
+frecuencias, y un equipo solo admite configuraciones que caigan dentro de
+alguno de los suyos. De partida existen:
+
+| Tipo | Desde | Hasta |
+|---|---|---|
+| HF | 1,8 MHz | 30 MHz |
+| CB | 26,965 MHz | 27,405 MHz |
+| VHF | 30 MHz | 300 MHz |
+| UHF | 300 MHz | 3 GHz |
+
+Se crean y se ajustan más en **Alt+C → Tipos de equipo**. Un equipo sin tipos
+lo admite todo, igual que una antena sin bandas.
 
 ### Borrar QSO del registro
 
 * **`Ctrl+D` desde la línea de entrada** borra el último contacto registrado,
   que es el caso habitual: acabas de guardar un indicativo mal escrito.
 * **`Tab` al histórico, `↑↓` y `Supr`** borra el contacto seleccionado.
-* **`F1`** abre el registro completo, donde puedes buscar primero y borrar
+* **`Alt+R`** abre el registro completo, donde puedes buscar primero y borrar
   con `Supr` o `Ctrl+D`.
 
 Siempre se pide confirmación, indicando indicativo, fecha, banda y modo.
 
 ### Frecuencias y unidades
 
-Toda frecuencia lleva unidad. En **F5 → Unidades y formato** se elige la que se
+Toda frecuencia lleva unidad. En **Alt+C → Unidades y formato** se elige la que se
 usa al mostrarlas y la que se supone al escribir un número sin unidad. Se
 guardan con la grafía del Sistema Internacional (`MHz`, `kHz`, `Hz`), escribas
 como escribas:
@@ -419,7 +454,7 @@ admita, termínalo en `!`:
 bv100!,chen
 ```
 
-Se cambia en **F10 → Entrada rápida → Validar indicativos**: `estricta` (por
+Se cambia en **Alt+C → Entrada rápida → Validar indicativos**: `estricta` (por
 defecto), `avisar` o `no`.
 
 ### Contactos automáticos y manuales
@@ -430,7 +465,7 @@ Esta distinción es deliberada:
   prueba de cuándo ocurrió el contacto, así que **solo se puede corregir el
   indicativo**: lo único que se corrige de verdad después es haber escuchado
   mal una letra.
-* **MANUAL** — contactos añadidos con fecha a mano (`F1` → `Ctrl+N`) o
+* **MANUAL** — contactos añadidos con fecha a mano (`Alt+R` → `Ctrl+N`) o
   importados desde un ADIF. No los cronometró esta aplicación, así que
   **todos sus campos son editables**.
 
@@ -438,7 +473,7 @@ Esta distinción es deliberada:
 
 Varios operadores comparten la misma base de datos y cada contacto queda
 asociado a quien lo registró. No hay contraseñas: se cambia de operador en
-`F10 → Operador activo`. Las estadísticas y las exportaciones pueden filtrarse
+`Alt+C → Operador activo`. Las estadísticas y las exportaciones pueden filtrarse
 por operador.
 
 ## Desde la línea de órdenes
@@ -481,7 +516,7 @@ que necesitarías para compartir el log entre varios equipos.
 
 ### Prometheus
 
-Se activa en `F10 → Métricas Prometheus` o con `hamrlog metrics`. Expone en
+Se activa en `Alt+C → Métricas Prometheus` o con `hamrlog metrics`. Expone en
 `/metrics`:
 
 ```

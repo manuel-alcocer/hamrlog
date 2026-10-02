@@ -13,10 +13,19 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import Engine, inspect, text
+from sqlalchemy import Engine, insert, inspect, select, text
 from sqlalchemy.schema import Column
 
-from .models import Base
+from .models import (
+    Antenna,
+    Base,
+    Profile,
+    Qso,
+    Station,
+    StationType,
+    station_antenna_links,
+    station_profile_links,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,3 +89,107 @@ def add_missing_columns(engine: Engine) -> list[str]:
             logger.info("schema upgrade: added %s.%s", table.name, column.name)
 
     return added
+
+
+#: Types every new or upgraded database starts with. Amateur HF includes 160 m,
+#: hence 1.8 MHz rather than the textbook 3 MHz.
+DEFAULT_STATION_TYPES: tuple[tuple[str, int, int], ...] = (
+    ("HF", 1_800_000, 30_000_000),
+    ("CB", 26_965_000, 27_405_000),
+    ("VHF", 30_000_000, 300_000_000),
+    ("UHF", 300_000_000, 3_000_000_000),
+)
+
+
+def upgrade_data(engine: Engine, previous_version: int | None) -> None:
+    """Fill in the data a schema revision expects.
+
+    Args:
+        previous_version: Revision the database was at before this start,
+            None for a database created just now.
+    """
+    if previous_version is None or previous_version < 4:
+        _seed_station_types(engine)
+        _assign_profiles_to_their_station(engine)
+    if previous_version is None or previous_version < 5:
+        _split_antennas_from_stations(engine)
+
+
+def _seed_station_types(engine: Engine) -> None:
+    """Create the default types, once. Deleting them later is respected."""
+    with engine.begin() as connection:
+        if connection.execute(select(StationType.id).limit(1)).first() is not None:
+            return
+        connection.execute(
+            insert(StationType),
+            [
+                {"name": name, "min_hz": low, "max_hz": high}
+                for name, low, high in DEFAULT_STATION_TYPES
+            ],
+        )
+    logger.info("schema upgrade: added the default station types")
+
+
+def _assign_profiles_to_their_station(engine: Engine) -> None:
+    """A profile used to carry one station; it becomes an assignment."""
+    with engine.begin() as connection:
+        rows = connection.execute(
+            select(Profile.id, Profile.station_id).where(Profile.station_id.is_not(None))
+        ).all()
+        for profile_id, station_id in rows:
+            connection.execute(
+                insert(station_profile_links).values(
+                    station_id=station_id, profile_id=profile_id
+                )
+            )
+            connection.execute(
+                Profile.__table__.update()
+                .where(Profile.id == profile_id)
+                .values(station_id=None)
+            )
+    if rows:
+        logger.info("schema upgrade: assigned %d profiles to their station", len(rows))
+
+
+def _split_antennas_from_stations(engine: Engine) -> None:
+    """The antenna text of each station becomes an antenna assigned to it.
+
+    Stations that named the same antenna share it. Their past QSOs take that
+    antenna, so MY_ANTENNA keeps coming out in the exports. The bands are
+    unknown and left empty, which accepts every configuration.
+    """
+    with engine.begin() as connection:
+        rows = connection.execute(
+            select(Station.id, Station.antenna).where(Station.antenna != "")
+        ).all()
+        antenna_ids: dict[str, int] = {}
+        for station_id, text_value in rows:
+            name = text_value.strip()
+            key = name.lower()
+            if key not in antenna_ids:
+                existing = connection.execute(
+                    select(Antenna.id).where(Antenna.name == name)
+                ).first()
+                if existing is None:
+                    result = connection.execute(
+                        insert(Antenna).values(name=name, bands=[], notes="")
+                    )
+                    antenna_ids[key] = result.inserted_primary_key[0]
+                else:
+                    antenna_ids[key] = existing[0]
+            antenna_id = antenna_ids[key]
+            connection.execute(
+                insert(station_antenna_links).values(
+                    station_id=station_id, antenna_id=antenna_id
+                )
+            )
+            connection.execute(
+                Qso.__table__.update()
+                .where(Qso.station_id == station_id, Qso.antenna_id.is_(None))
+                .values(antenna_id=antenna_id)
+            )
+            connection.execute(
+                Station.__table__.update().where(Station.id == station_id).values(antenna="")
+            )
+    if rows:
+        logger.info("schema upgrade: moved %d station antennas to their own table", len(rows))

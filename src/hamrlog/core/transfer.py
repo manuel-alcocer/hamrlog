@@ -76,12 +76,14 @@ def default_export_path(extension: str) -> Path:
 
 
 def _station_lookup() -> dict[str, dict[str, str]]:
-    """Station name -> rig details, used to fill MY_RIG / MY_ANTENNA."""
+    """Station name -> rig details, used to fill MY_RIG and TX_PWR.
+
+    The antenna is not here: it belongs to each QSO, not to the station.
+    """
     lookup: dict[str, dict[str, str]] = {}
     for station in StationService.list_all():
         lookup[station.name] = {
             "rig": station.rig,
-            "antenna": station.antenna,
             "power_w": str(station.power_w) if station.power_w else "",
         }
     return lookup

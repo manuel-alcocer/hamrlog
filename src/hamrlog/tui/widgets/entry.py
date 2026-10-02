@@ -153,6 +153,8 @@ class EntryPanel(Vertical):
         #: Values put aside while browsing, so it never costs a half-typed QSO.
         self._draft: dict[str, str] = {}
         self._browsing = False
+        #: Keys of the menu open in the main panel, shown on the help line.
+        self._menu_keys = ""
         #: Pending rebuild of the field boxes, awaited by ``ready()`` so the
         #: caller can focus them without racing the layout.
         self._pending_mount: asyncio.Task[None] | None = None
@@ -287,8 +289,26 @@ class EntryPanel(Vertical):
     def set_hint(self, field_order: tuple[str, ...]) -> None:
         """Rebuild the form for this field order and refresh the help line."""
         self.build_fields(field_order)
-        self.query_one("#entry-hint", Static).update(
-            Text.assemble(
+        if not self._menu_keys:
+            self.query_one("#entry-hint", Static).update(self._entry_keys())
+
+    def show_keys(self, keys: str | None) -> None:
+        """Put a menu's keys on the help line, or the entry's back with None.
+
+        While a menu fills the main panel the entry cannot be typed in, so
+        its line says what the menu's keys do instead: the menus themselves
+        carry no help text.
+        """
+        self._menu_keys = keys or ""
+        hint = self.query_one("#entry-hint", Static)
+        if keys:
+            hint.update(Text(f"  {keys}", style="dim italic"))
+        else:
+            hint.update(self._entry_keys())
+
+    @staticmethod
+    def _entry_keys() -> Text:
+        return Text.assemble(
                 ("  Tab", "dim"),
                 (" campo siguiente  ·  ", "dim italic"),
                 ("Mayús+Tab", "dim"),
@@ -300,7 +320,6 @@ class EntryPanel(Vertical):
                 ("/ayuda", "dim"),
                 (" comandos", "dim italic"),
             )
-        )
 
     def feedback(self, message: str, level: str = "info") -> None:
         """Show a transient message under the form.

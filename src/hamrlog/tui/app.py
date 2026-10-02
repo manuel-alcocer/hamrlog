@@ -19,6 +19,7 @@ from textual.containers import Vertical
 from ..core import bands, callsign, modes
 from ..core import entry as entry_parser
 from ..core.services import (
+    AntennaService,
     ContactService,
     OperatorService,
     ProfileService,
@@ -35,10 +36,10 @@ from .screens.config import DEFAULT_METRICS, METRICS_KEY, ConfigScreen
 from .screens.contacts import ContactsScreen
 from .screens.help import HelpScreen
 from .screens.log import LogScreen
-from .screens.profiles import ProfileScreen
+from .screens.profiles import ProfilePick, ProfileScreen
 from .screens.repeaters import DIRECT, RepeaterScreen
 from .screens.selectors import FrequencyScreen, band_screen, mode_screen
-from .screens.stations import StationScreen
+from .screens.stations import StationPick, StationScreen
 from .screens.transfer import TransferScreen
 from .widgets.detail import DetailPanel
 from .widgets.entry import BrowseBar, EntryField, EntryPanel
@@ -86,18 +87,17 @@ class HamrlogApp(App[None]):
     TITLE = "hamrlog"
     SUB_TITLE = "diario de radioaficionado"
 
-    # priority=True so the function keys work while the entry line has focus.
+    # priority=True so the shortcuts work while the entry line has focus.
     BINDINGS = [
-        Binding("f1", "log", "Registro", priority=True),
-        Binding("f2", "band", "Banda", priority=True),
-        Binding("f3", "frequency", "Frecuencia", priority=True),
-        Binding("f4", "mode", "Modo", priority=True),
-        Binding("f5", "config", "Configuración", priority=True),
-        Binding("f6", "station", "Equipo", priority=True),
-        Binding("f7", "profiles", "Perfiles", priority=True),
-        Binding("f8", "contacts", "Contactos", priority=True),
-        Binding("f9", "repeater", "Repetidor", priority=True),
-        Binding("f10", "menu", "Menú", priority=True),
+        Binding("alt+r", "log", "Registro", priority=True),
+        Binding("alt+b", "band", "Banda", priority=True),
+        Binding("alt+f", "frequency", "Frecuencia", priority=True),
+        Binding("alt+m", "mode", "Modo", priority=True),
+        Binding("alt+c", "config", "Configuración", priority=True),
+        Binding("alt+e", "station", "Equipo", priority=True),
+        Binding("alt+p", "profiles", "Perfiles", priority=True),
+        Binding("alt+o", "contacts", "Contactos", priority=True),
+        Binding("alt+t", "repeater", "Repetidor", priority=True),
         # Help is out of the top menu, so it lives here and in the footer.
         # F12 is kept as a fallback: some terminals swallow Ctrl+F1.
         Binding("ctrl+f1", "help", "Ayuda", priority=True),
@@ -208,7 +208,9 @@ class HamrlogApp(App[None]):
 
     def _create_first_operator(self, values: dict[str, str] | None) -> None:
         if not values or not values.get("callsign"):
-            self.notify("Sin operador no se pueden registrar contactos (F10).", severity="warning")
+            self.notify(
+                "Sin operador no se pueden registrar contactos (Alt+C).", severity="warning"
+            )
             return
         try:
             operator = OperatorService.create(
@@ -226,14 +228,13 @@ class HamrlogApp(App[None]):
         """Push the session state into the status line."""
         status = self.query_one(StatusLine)
         operator = OperatorService.get(self.state.operator_id) if self.state.operator_id else None
-        station = StationService.get(self.state.station_id) if self.state.station_id else None
 
         status.operator = operator.callsign if operator else ""
         status.repeater = self.state.repeater_call
         status.band = self.state.band
         status.freq_hz = self.state.freq_hz
         status.mode = self.state.mode
-        status.station = station.summary if station else ""
+        status.station = self._equipment_summary()
         status.profile = self.state.profile_name
         status.digital_summary = modes.status_summary(
             self.state.digital_data, has_repeater=self.state.via_repeater
@@ -257,14 +258,23 @@ class HamrlogApp(App[None]):
             return
 
         operator = OperatorService.get(self.state.operator_id) if self.state.operator_id else None
-        station = StationService.get(self.state.station_id) if self.state.station_id else None
         stats = QsoService.stats()
         detail.show_session(
             self.state,
             operator=operator.display if operator else "",
-            station=station.summary if station else "",
+            station=self._equipment_summary(),
             stats_line=f"{stats.today} QSO hoy" if stats.today else "",
         )
+
+    def _equipment_summary(self) -> str:
+        """Rig, antenna and power in use, empty without a station."""
+        station = StationService.get(self.state.station_id) if self.state.station_id else None
+        if station is None:
+            return ""
+        antenna = (
+            AntennaService.get(self.state.antenna_id) if self.state.antenna_id else None
+        )
+        return station.summary(antenna)
 
     def _refresh_stats(self) -> None:
         self.query_one(StatsFooter).stats = QsoService.stats()
@@ -624,18 +634,21 @@ class HamrlogApp(App[None]):
     def action_station(self) -> None:
         if self._shortcut_busy(StationScreen):
             return
-        self.push_screen(StationScreen(self.state.station_id), self._on_station_chosen)
+        self.push_screen(
+            StationScreen(self.state.station_id, self.state.antenna_id), self._on_station_chosen
+        )
 
-    def _on_station_chosen(self, station_id: int | None) -> None:
-        if station_id is None:
+    def _on_station_chosen(self, pick: StationPick | None) -> None:
+        if pick is None:
             self.query_one(EntryPanel).focus_input()
             return
-        self.state.station_id = station_id or None
+        self.state.station_id = pick.station_id
+        self.state.antenna_id = pick.antenna_id
         self.state.profile_name = ""
         self._refresh_status()
-        station = StationService.get(station_id) if station_id else None
+        summary = self._equipment_summary()
         panel = self.query_one(EntryPanel)
-        panel.feedback(f"Equipo: {station.summary}" if station else "Sin equipo asignado", "ok")
+        panel.feedback(f"Equipo: {summary}" if summary else "Sin equipo asignado", "ok")
         panel.focus_input()
 
     def action_repeater(self) -> None:
@@ -704,24 +717,34 @@ class HamrlogApp(App[None]):
             return
         self.push_screen(ProfileScreen(self.state), self._on_profile_result)
 
-    def _on_profile_result(self, result: tuple[str, int | None] | None) -> None:
+    def _on_profile_result(self, pick: ProfilePick | None) -> None:
         panel = self.query_one(EntryPanel)
-        if result is None:
+        if pick is None:
             panel.focus_input()
             return
-        action, profile_id = result
-        if action == "load" and profile_id is not None:
+        if pick.action == "load":
             try:
-                ProfileService.apply_to_state(profile_id, self.state)
+                ProfileService.apply_to_state(
+                    pick.profile_id,
+                    self.state,
+                    station_id=pick.station_id,
+                    antenna_id=pick.antenna_id,
+                )
             except ServiceError as exc:
                 panel.feedback(str(exc), "error")
                 return
-            panel.feedback(f"Perfil «{self.state.profile_name}» cargado", "ok")
-        elif action == "saved" and profile_id is not None:
-            profile = ProfileService.get(profile_id)
+            verb = "cargada"
+        else:
+            profile = ProfileService.get(pick.profile_id)
             if profile is not None:
                 self.state.profile_name = profile.name
-            panel.feedback(f"Perfil «{self.state.profile_name}» guardado", "ok")
+            if pick.station_id is not None:
+                self.state.station_id = pick.station_id
+                self.state.antenna_id = pick.antenna_id
+            verb = "guardada"
+        summary = self._equipment_summary() if pick.station_id else ""
+        where = f" en {summary}" if summary else ""
+        panel.feedback(f"Configuración «{self.state.profile_name}» {verb}{where}", "ok")
         self._refresh_status()
         panel.focus_input()
 
@@ -733,9 +756,9 @@ class HamrlogApp(App[None]):
             if profile.name.lower() == needle:
                 ProfileService.apply_to_state(profile.id, self.state)
                 self._refresh_status()
-                panel.feedback(f"Perfil «{profile.name}» cargado", "ok")
+                panel.feedback(f"Configuración «{profile.name}» cargada", "ok")
                 return
-        panel.feedback(f"No existe el perfil «{name}»", "error")
+        panel.feedback(f"No existe la configuración «{name}»", "error")
 
     def _open_or_swap(self, screen_type: type, factory: Callable[[], object]) -> None:
         """Open one of the two browse screens.
@@ -754,11 +777,11 @@ class HamrlogApp(App[None]):
         self.push_screen(factory(), self._on_contacts_closed)  # type: ignore[arg-type]
 
     def action_log(self) -> None:
-        """F1: the QSOs recorded."""
+        """Alt+R: the QSOs recorded."""
         self._open_or_swap(LogScreen, lambda: LogScreen(self.state))
 
     def action_contacts(self) -> None:
-        """F8: the address book."""
+        """Alt+O: the address book."""
         self._open_or_swap(ContactsScreen, ContactsScreen)
 
     def _on_contacts_closed(self, changed: bool | None) -> None:
@@ -771,23 +794,6 @@ class HamrlogApp(App[None]):
         if self._shortcut_busy(TransferScreen):
             return
         self.push_screen(TransferScreen(self.state), self._on_contacts_closed)
-
-    def action_menu(self) -> None:
-        """F10: walk the top menu with the cursor keys, like Midnight Commander."""
-        if self._modal_open:
-            return
-        self.query_one(MenuBar).enter_menu()
-
-    @on(MenuBar.Activated)
-    def _on_menu_activated(self, event: MenuBar.Activated) -> None:
-        self.query_one(EntryPanel).focus_input()
-        handler = getattr(self, f"action_{event.action}", None)
-        if callable(handler):
-            handler()
-
-    @on(MenuBar.Left)
-    def _on_menu_left(self) -> None:
-        self.query_one(EntryPanel).focus_input()
 
     def action_back_to_entry(self) -> None:
         """Escape leaves the log and returns to the insert row."""
