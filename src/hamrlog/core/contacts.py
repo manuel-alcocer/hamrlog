@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from ..i18n import N_, _
 from .callsign import CALLSIGN_RE
 
 #: Canonical field -> header spellings seen in the wild, lower-cased and with
@@ -160,7 +161,7 @@ def _build_record(values: dict[str, str]) -> ContactRecord | None:
     last = values.get("last_name", "").strip()
     # Some exports put the whole name in one column.
     if first and not last and " " in first and len(first.split()) > 1:
-        head, _, tail = first.partition(" ")
+        head, _sep, tail = first.partition(" ")
         first, last = head, tail.strip()
 
     return ContactRecord(
@@ -200,31 +201,37 @@ def read_csv(text: str) -> ReadReport:
     try:
         first = next(rows)
     except StopIteration:
-        report.warnings.append("El fichero está vacío.")
+        report.warnings.append(_("The file is empty."))
         return report
 
     if _looks_like_header(first):
         mapping = _map_headers(first)
-        report.format_name = f"CSV con cabecera ({delimiter!r} como separador)"
+        report.format_name = _("CSV with header ({delimiter} as separator)").format(
+            delimiter=repr(delimiter)
+        )
     elif _looks_like_radioid_row(first):
         mapping = dict(enumerate(RADIOID_POSITIONAL))
-        report.format_name = "CSV sin cabecera, orden de RadioID.net"
+        report.format_name = _("CSV without header, RadioID.net order")
         rows = iter([first, *rows])
     else:
         # Without a recognisable header, the only safe fallback is the
         # RadioID column order. Assuming it for an unrelated CSV would fill
         # the address book with nonsense, so refuse instead.
         report.warnings.append(
-            "No se reconoce el formato: no hay cabeceras conocidas y la primera "
-            "fila no tiene la forma de RadioID.net (ID DMR, indicativo, nombre...). "
-            "Comprueba que el fichero sea una lista de contactos."
+            _(
+                "Unknown format: there are no known headers and the first row does "
+                "not look like RadioID.net (DMR ID, callsign, name...). Check that "
+                "the file is a contact list."
+            )
         )
         return report
 
     if not mapping:
         report.warnings.append(
-            "No se ha reconocido ninguna columna. Se esperan al menos "
-            "un indicativo (CALLSIGN) o un identificador DMR (RADIO_ID)."
+            _(
+                "No column was recognised. At least a callsign (CALLSIGN) or "
+                "a DMR ID (RADIO_ID) is expected."
+            )
         )
         return report
 
@@ -267,7 +274,7 @@ def read_json(text: str) -> ReadReport:
     try:
         data: Any = json.loads(text)
     except json.JSONDecodeError as exc:
-        report.warnings.append(f"JSON no válido: {exc}")
+        report.warnings.append(_("Invalid JSON: {error}").format(error=exc))
         return report
 
     entries: list[Any] | None = None
@@ -279,7 +286,7 @@ def read_json(text: str) -> ReadReport:
                 entries = value
                 break
     if entries is None:
-        report.warnings.append("No se ha encontrado ninguna lista de contactos en el JSON.")
+        report.warnings.append(_("No contact list was found in the JSON."))
         return report
 
     for entry in entries:
@@ -322,11 +329,11 @@ def read_file(path: str | Path) -> ReadReport:
 # Writers
 # --------------------------------------------------------------------------- #
 
-#: Export layouts. Each maps a column header to a function of the record.
+#: Export layouts -> description, in English; translate it with _() where shown.
 EXPORT_FORMATS: dict[str, str] = {
-    "hamrlog": "CSV de hamrlog, con cabeceras en español",
-    "radioid": "CSV de RadioID.net / BrandMeister",
-    "anytone": "CSV para el CPS de Anytone (D878UV y compatibles)",
+    "hamrlog": N_("hamrlog CSV, with Spanish headers"),
+    "radioid": N_("RadioID.net / BrandMeister CSV"),
+    "anytone": N_("CSV for the Anytone CPS (D878UV and compatibles)"),
 }
 
 

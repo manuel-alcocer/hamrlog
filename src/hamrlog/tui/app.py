@@ -10,6 +10,7 @@ from __future__ import annotations
 from importlib import resources
 
 from textual import on
+from textual.actions import SkipAction
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
@@ -29,11 +30,21 @@ from ..core.services import (
 )
 from ..core.state import SessionState
 from ..db.session import init_engine
+from ..i18n import N_, _
+from .inventory import KINDS, Item, Kind, tab_bar
 from .screens.base import ConfirmScreen, Field, FormScreen
 from .widgets.detail import DetailPanel
-from .widgets.entry import EDIT_EXTRA_FIELDS, BrowseBar, EntryField, EntryPanel
+from .widgets.entry import (
+    BROWSE_PROMPT,
+    EDIT_EXTRA_FIELDS,
+    EDIT_KEYS,
+    BrowseBar,
+    EntryField,
+    EntryPanel,
+)
 from .widgets.footer import StatsFooter
 from .widgets.history import HistoryPanel
+from .widgets.items import InventoryView, ItemTable
 from .widgets.statusline import StatusLine
 
 #: Settings key and defaults of the Prometheus exporter.
@@ -51,20 +62,33 @@ COMMANDS: dict[str, str] = {
     "repetidor": "repeater", "rptr": "repeater", "repeater": "repeater",
     "directo": "direct", "simplex": "direct",
     "deshacer": "undo", "undo": "undo", "borrar": "undo", "delete": "undo",
+    "marca": "brand", "brand": "brand",
     "salir": "quit", "quit": "quit", "exit": "quit",
 }
 
-#: What ``/ayuda`` puts on the feedback line. Short enough for 80 columns; a
-#: command typed without its value explains itself.
-COMMAND_SUMMARY = "Comandos: /banda /frec /modo /perfil /repetidor /directo /deshacer /salir"
+#: What ``/help`` puts on the feedback line. Short enough for 80 columns; a
+#: command typed without its value explains itself. Translated where shown.
+COMMAND_SUMMARY = N_("Commands: /band /freq /mode /profile /repeater /direct /undo /quit")
+
+#: ``/help`` in the inventory view.
+INVENTORY_SUMMARY = N_("Inventory: /brand NAME filters the list · /brand alone clears the filter")
+
+#: Help line of the inventory view.
+INVENTORY_KEYS = N_("Enter add · ↑↓ list · F5/F6 tab · Alt+↑↓ brand · F1 log")
+
+#: Help line while editing an item of the inventory view.
+INVENTORY_EDIT_KEYS = N_("Editing · Tab next field · Enter saves · Esc cancels")
+
+#: Action bar over an item of the inventory view.
+INVENTORY_BROWSE = N_("D delete · E edit · ↓ back to typing")
 
 #: Shown when a command that needs a value is typed without one.
 COMMAND_USAGE: dict[str, str] = {
-    "band": "Uso: /banda 40m",
-    "frequency": "Uso: /frec 7.100",
-    "mode": "Uso: /modo SSB",
-    "profiles": "Uso: /perfil nombre",
-    "repeater": "Uso: /repetidor INDICATIVO · /directo para volver a simplex",
+    "band": N_("Usage: /band 40m"),
+    "frequency": N_("Usage: /freq 7.100"),
+    "mode": N_("Usage: /mode SSB"),
+    "profiles": N_("Usage: /profile name"),
+    "repeater": N_("Usage: /repeater CALLSIGN · /direct to go back to simplex"),
 }
 
 #: How many previously typed lines the up/down keys can recall.
@@ -78,17 +102,32 @@ class HamrlogApp(App[None]):
     # disk, so CSS_PATH would fail there.
     CSS = resources.files("hamrlog.tui").joinpath("styles.tcss").read_text(encoding="utf-8")
     TITLE = "hamrlog"
-    SUB_TITLE = "diario de radioaficionado"
+    SUB_TITLE = N_("amateur radio logbook")
 
     # priority=True so the shortcuts work while the entry line has focus.
     BINDINGS = [
-        Binding("ctrl+d", "delete_qso", "Borrar QSO", priority=True),
-        Binding("escape", "back_to_entry", "Volver a escribir", show=False),
-        Binding("ctrl+q", "quit", "Salir", priority=True),
+        # Every function key goes through one action: what it does depends
+        # on the view, and a key a view does not use must do nothing rather
+        # than reach the entry line.
+        *(
+            Binding(f"f{number}", f"function_key('f{number}')", N_("Function key"),
+                    priority=True, show=False)
+            for number in range(1, 13)
+        ),
+        Binding("pageup", "function_key('pageup')", N_("Previous page"),
+                priority=True, show=False),
+        Binding("pagedown", "function_key('pagedown')", N_("Next page"),
+                priority=True, show=False),
+        Binding("alt+up", "cycle_brand(-1)", N_("Previous brand"), priority=True, show=False),
+        Binding("alt+down", "cycle_brand(1)", N_("Next brand"), priority=True, show=False),
+        Binding("ctrl+d", "delete_qso", N_("Delete QSO"), priority=True),
+        Binding("escape", "back_to_entry", N_("Back to typing"), show=False),
+        Binding("ctrl+q", "quit", N_("Quit"), priority=True),
     ]
 
     def __init__(self, database_url: str | None = None) -> None:
         super().__init__()
+        self.sub_title = _(self.SUB_TITLE)
         self.database_url = database_url
         self.state = SessionState()
         self._line_history: list[dict[str, str]] = []
@@ -97,8 +136,16 @@ class HamrlogApp(App[None]):
         #: True while the feedback line describes the selected QSO, so that
         #: leaving the selection clears it without wiping other messages.
         self._showing_selection = False
-        #: Id of the logged QSO the entry form is correcting, if any.
+        #: Id of the logged QSO (or item) the entry form is correcting, if any.
         self._editing_id: int | None = None
+        #: "log" or "inventory": what the main frame and the entry line serve.
+        self._view = "log"
+        #: Active tab of the inventory view, an index into KINDS.
+        self._tab = 0
+        #: Brand filter per tab key; empty shows every brand.
+        self._brands: dict[str, str] = {}
+        #: Half-typed entries per view, so switching never loses one.
+        self._drafts: dict[str, dict[str, str]] = {}
 
     # ------------------------------------------------------------- layout --
     def compose(self) -> ComposeResult:
@@ -107,6 +154,7 @@ class HamrlogApp(App[None]):
         # are two views of the same thing, the entry form is a separate job.
         with Vertical(id="log-frame"):
             yield HistoryPanel(id="history")
+            yield InventoryView(id="inventory")
             yield DetailPanel(id="detail")
         yield EntryPanel(id="entry")
         yield StatsFooter(id="stats")
@@ -123,7 +171,8 @@ class HamrlogApp(App[None]):
         self._refresh_stats()
         # Wait for the field boxes to exist before handing them the keyboard,
         # so nothing else can take it first.
-        self.query_one("#log-frame", Vertical).border_title = "Registro"
+        self.query_one("#log-frame", Vertical).border_title = _("Log")
+        self.query_one(InventoryView).display = False
         self._refresh_detail(None)
         panel = self.query_one(EntryPanel)
         await panel.ready()
@@ -163,11 +212,16 @@ class HamrlogApp(App[None]):
 
         port = int(config.get("port", DEFAULT_METRICS["port"]))
         if start_exporter(port):
-            self.notify(f"Métricas Prometheus en el puerto {port}.", severity="information")
+            self.notify(
+                _("Prometheus metrics on port {port}.").format(port=port),
+                severity="information",
+            )
         else:
             self.notify(
-                "No se pudo arrancar el exportador de métricas. "
-                "Comprueba el puerto o instala hamrlog[metrics].",
+                _(
+                    "Could not start the metrics exporter. "
+                    "Check the port or install hamrlog[metrics]."
+                ),
                 severity="warning",
             )
 
@@ -175,14 +229,14 @@ class HamrlogApp(App[None]):
         """Ask for a callsign the first time the application is opened."""
         self.push_screen(
             FormScreen(
-                "Bienvenido a hamrlog",
+                _("Welcome to hamrlog"),
                 [
-                    Field("callsign", "Tu indicativo", placeholder="EA7WM"),
-                    Field("name", "Nombre"),
-                    Field("gridsquare", "Locator", placeholder="IM76"),
+                    Field("callsign", _("Your callsign"), placeholder="EA7WM"),
+                    Field("name", _("Name")),
+                    Field("gridsquare", _("Locator"), placeholder="IM76"),
                 ],
-                subtitle="Necesito un operador para empezar a registrar contactos.",
-                save_label="Empezar",
+                subtitle=_("I need an operator to start logging contacts."),
+                save_label=_("Start"),
             ),
             self._create_first_operator,
         )
@@ -190,7 +244,7 @@ class HamrlogApp(App[None]):
     def _create_first_operator(self, values: dict[str, str] | None) -> None:
         if not values or not values.get("callsign"):
             self.notify(
-                "Sin operador no se pueden registrar contactos.", severity="warning"
+                _("Without an operator no contacts can be logged."), severity="warning"
             )
             return
         try:
@@ -202,7 +256,9 @@ class HamrlogApp(App[None]):
             return
         self.state.operator_id = operator.id
         self._refresh_status()
-        self.notify(f"Operador {operator.callsign} listo. Buena suerte con el DX.")
+        self.notify(
+            _("Operator {call} ready. Good luck with the DX.").format(call=operator.callsign)
+        )
 
     # ------------------------------------------------------------ refresh --
     def _refresh_status(self) -> None:
@@ -221,7 +277,8 @@ class HamrlogApp(App[None]):
             self.state.digital_data, has_repeater=self.state.via_repeater
         )
         self.state.apply_frequency_format()
-        self.query_one(EntryPanel).set_hint(self.state.field_order)
+        if self._view == "log":
+            self.query_one(EntryPanel).set_hint(self.state.field_order)
         history = self.query_one(HistoryPanel)
         history.set_order(self.state.history_order)
         history.refresh_headers()
@@ -244,7 +301,7 @@ class HamrlogApp(App[None]):
             self.state,
             operator=operator.display if operator else "",
             station=self._equipment_summary(),
-            stats_line=f"{stats.today} QSO hoy" if stats.today else "",
+            stats_line=_("{count} QSO today").format(count=stats.today) if stats.today else "",
         )
 
     def _equipment_summary(self) -> str:
@@ -278,6 +335,9 @@ class HamrlogApp(App[None]):
         if self._editing_id is not None:
             # The form holds that row's values: moving away would orphan them.
             return
+        if self._view == "inventory":
+            self.query_one(ItemTable).move_selection(event.delta)
+            return
         self.query_one(HistoryPanel).move_selection(event.delta)
 
     @on(HistoryPanel.SelectionChanged)
@@ -309,7 +369,7 @@ class HamrlogApp(App[None]):
     @on(EntryField.Recall)
     def _on_recall(self, event: EntryField.Recall) -> None:
         """Walk previously entered QSOs with Ctrl+Up and Ctrl+Down."""
-        if not self._line_history or self._editing_id is not None:
+        if not self._line_history or self._editing_id is not None or self._view != "log":
             return
         if self._history_index is None:
             self._history_index = len(self._line_history)
@@ -329,7 +389,11 @@ class HamrlogApp(App[None]):
         EntryField does not define its own Changed, so this fires for every
         Input on screen, including the boxes of the form dialog.
         """
-        if not isinstance(event.input, EntryField) or self._editing_id is not None:
+        if (
+            not isinstance(event.input, EntryField)
+            or self._editing_id is not None
+            or self._view != "log"
+        ):
             return
         if event.input.field_name != "call":
             return
@@ -341,7 +405,7 @@ class HamrlogApp(App[None]):
                 self._last_dup_check = ""
             return
 
-        token, _ = callsign.strip_override(text.upper())
+        token, _override = callsign.strip_override(text.upper())
         if len(token) < 4:
             if self._last_dup_check:
                 panel.feedback("")
@@ -365,9 +429,13 @@ class HamrlogApp(App[None]):
         previous = QsoService.find_duplicates(token, self.state.band, self.state.mode)
         if previous:
             last = previous[0]
-            message = (
-                f" DUPLICADO  ya trabajado {len(previous)}× en {last.band}/{last.mode} · "
-                f"último {last.qso_utc:%Y-%m-%d %H:%M} UTC"
+            message = _(
+                " DUPLICATE  already worked {count}× on {band}/{mode} · last {when} UTC"
+            ).format(
+                count=len(previous),
+                band=last.band,
+                mode=last.mode,
+                when=f"{last.qso_utc:%Y-%m-%d %H:%M}",
             )
             name = identity or last.name
             panel.feedback(f"{message} · {name}" if name else message, "dup")
@@ -376,11 +444,13 @@ class HamrlogApp(App[None]):
         worked = QsoService.find_duplicates(token, "", "")
         if worked:
             last = worked[0]
-            message = f"Conocido: {len(worked)} QSO previos · último en {last.band}/{last.mode}"
+            message = _("Known: {count} previous QSO · last on {band}/{mode}").format(
+                count=len(worked), band=last.band, mode=last.mode
+            )
             name = identity or last.name
             panel.feedback(f"{message} · {name}" if name else message, "info")
         elif identity:
-            panel.feedback(f"Agenda: {identity}", "info")
+            panel.feedback(_("Address book: {who}").format(who=identity), "info")
         else:
             panel.feedback("")
 
@@ -389,6 +459,13 @@ class HamrlogApp(App[None]):
         panel = self.query_one(EntryPanel)
         history = self.query_one(HistoryPanel)
         values = panel.values()
+
+        if self._view == "inventory" and not entry_parser.is_command(panel.first_value):
+            if self._editing_id is not None:
+                self._save_item(self._editing_id, values)
+            elif any(values.values()):
+                self._save_item(None, values)
+            return
 
         if self._editing_id is not None:
             self._save_edit(self._editing_id, values)
@@ -424,7 +501,7 @@ class HamrlogApp(App[None]):
             validation=self.state.callsign_validation,
         )
         if not parsed.ok:
-            panel.feedback(parsed.error or "Entrada no válida.", "error")
+            panel.feedback(parsed.error or _("Invalid entry."), "error")
             return
 
         # Checked before logging: afterwards the entry may exist because
@@ -446,11 +523,13 @@ class HamrlogApp(App[None]):
         self._refresh_stats()
         self._refresh_detail(None)
 
-        message = f"✓ {row.call} guardado a las {row.qso_utc:%H:%M:%S} UTC"
+        message = _("✓ {call} logged at {time} UTC").format(
+            call=row.call, time=f"{row.qso_utc:%H:%M:%S}"
+        )
         if row.country:
-            message += f" · {row.country}"
+            message += f" · {_(row.country)}"
         if not was_known:
-            message += " · nuevo en la agenda"
+            message += _(" · new in the address book")
         if parsed.warnings:
             panel.feedback(f"{message}   ⚠ {' '.join(parsed.warnings)}", "warning")
         else:
@@ -463,16 +542,23 @@ class HamrlogApp(App[None]):
         action = COMMANDS.get(command.name)
         if action is None:
             panel.feedback(
-                f"Comando desconocido: «/{command.name}». Escribe /ayuda para ver la lista.",
+                _("Unknown command: «/{command}». Type /help to see the list.").format(
+                    command=command.name
+                ),
                 "error",
             )
             return
 
         if action == "help":
-            panel.feedback(COMMAND_SUMMARY, "info")
+            panel.feedback(
+                _(INVENTORY_SUMMARY if self._view == "inventory" else COMMAND_SUMMARY), "info"
+            )
+            return
+        if action == "brand":
+            self._filter_brand(command.argument)
             return
         if action in COMMAND_USAGE and not command.argument:
-            panel.feedback(COMMAND_USAGE[action], "info")
+            panel.feedback(_(COMMAND_USAGE[action]), "info")
             return
 
         if command.argument:
@@ -482,7 +568,10 @@ class HamrlogApp(App[None]):
             if action == "frequency":
                 freq_hz = bands.parse_frequency(command.argument)
                 if freq_hz is None:
-                    panel.feedback(f"Frecuencia no reconocida: «{command.argument}»", "error")
+                    panel.feedback(
+                        _("Frequency not recognised: «{text}»").format(text=command.argument),
+                        "error",
+                    )
                     return
                 self._apply_frequency(freq_hz)
                 return
@@ -508,13 +597,16 @@ class HamrlogApp(App[None]):
         band = bands.get(band_name)
         panel = self.query_one(EntryPanel)
         if band is None:
-            panel.feedback(f"Banda desconocida: «{band_name}»", "error")
+            panel.feedback(_("Unknown band: «{band}»").format(band=band_name), "error")
             return
         self.state.set_band(band.name)
         self.state.profile_name = ""
         self._refresh_status()
         panel.feedback(
-            f"Banda {band.name} · {bands.format_frequency(self.state.freq_hz)}", "ok"
+            _("Band {band} · {freq}").format(
+                band=band.name, freq=bands.format_frequency(self.state.freq_hz)
+            ),
+            "ok",
         )
         panel.focus_input()
 
@@ -523,18 +615,21 @@ class HamrlogApp(App[None]):
         self.state.profile_name = ""
         self._refresh_status()
         panel = self.query_one(EntryPanel)
-        panel.feedback(
-            f"Frecuencia {bands.format_frequency(freq_hz)}"
-            + (f" · banda {self.state.band}" if self.state.band else " · fuera de banda"),
-            "ok" if self.state.band else "warning",
-        )
+        freq = bands.format_frequency(freq_hz)
+        if self.state.band:
+            panel.feedback(
+                _("Frequency {freq} · band {band}").format(freq=freq, band=self.state.band),
+                "ok",
+            )
+        else:
+            panel.feedback(_("Frequency {freq} · out of band").format(freq=freq), "warning")
         panel.focus_input()
 
     def _apply_mode(self, mode_name: str) -> None:
         mode = modes.get(mode_name)
         panel = self.query_one(EntryPanel)
         if mode is None:
-            panel.feedback(f"Modo desconocido: «{mode_name}»", "error")
+            panel.feedback(_("Unknown mode: «{mode}»").format(mode=mode_name), "error")
             return
         self.state.set_mode(mode.name)
         self.state.profile_name = ""
@@ -542,22 +637,24 @@ class HamrlogApp(App[None]):
         if mode.digital_fields:
             self._ask_digital_fields(mode)
         else:
-            panel.feedback(f"Modo {mode.name}", "ok")
+            panel.feedback(_("Mode {mode}").format(mode=mode.name), "ok")
             panel.focus_input()
 
     def _ask_digital_fields(self, mode: modes.Mode) -> None:
         """Ask for the values a digital mode needs (talkgroup, reflector...)."""
         fields = [
-            Field(key, label, self.state.digital_data.get(key, ""))
+            Field(key, _(label), self.state.digital_data.get(key, ""))
             for key, label in mode.digital_fields
         ]
         self.push_screen(
             FormScreen(
-                f"Datos de {mode.name}",
+                _("{mode} settings").format(mode=mode.name),
                 fields,
-                subtitle="Se aplican a todos los contactos hasta que los cambies. "
-                "Se exportan como campos APP_HAMRLOG_* en ADIF.",
-                save_label="Aplicar",
+                subtitle=_(
+                    "They apply to every contact until you change them. "
+                    "They are exported as APP_HAMRLOG_* fields in ADIF."
+                ),
+                save_label=_("Apply"),
             ),
             self._on_digital_fields,
         )
@@ -567,7 +664,7 @@ class HamrlogApp(App[None]):
         if values is not None:
             self.state.digital_data = {k: v for k, v in values.items() if v}
         self._refresh_status()
-        panel.feedback(f"Modo {self.state.mode} configurado", "ok")
+        panel.feedback(_("Mode {mode} set up").format(mode=self.state.mode), "ok")
         panel.focus_input()
 
     def _apply_repeater(self, repeater_id: int) -> None:
@@ -581,69 +678,89 @@ class HamrlogApp(App[None]):
         self._refresh_status()
         repeater = RepeaterService.get(repeater_id)
         if repeater is not None:
-            detail = (
-                f"escucha {bands.format_frequency(repeater.output_hz)} · "
-                f"transmite {bands.format_frequency(repeater.input_hz)}"
+            detail = _("listen {rx} · transmit {tx}").format(
+                rx=bands.format_frequency(repeater.output_hz),
+                tx=bands.format_frequency(repeater.input_hz),
             )
             if repeater.ctcss_tx:
-                detail += f" · subtono {repeater.ctcss_tx}"
-            panel.feedback(f"Por el repetidor {repeater.callsign} · {detail}", "ok")
+                detail += _(" · tone {tone}").format(tone=repeater.ctcss_tx)
+            panel.feedback(
+                _("Via repeater {call} · {detail}").format(
+                    call=repeater.callsign, detail=detail
+                ),
+                "ok",
+            )
         panel.focus_input()
 
     def action_direct(self) -> None:
         """Leave the repeater and work simplex on the current frequency."""
         panel = self.query_one(EntryPanel)
         if not self.state.via_repeater:
-            panel.feedback("Ya estabas trabajando en directo.", "info")
+            panel.feedback(_("You were already working direct."), "info")
             panel.focus_input()
             return
         self.state.clear_repeater()
         self.state.profile_name = ""
         self._refresh_status()
         panel.feedback(
-            f"Directo en {bands.format_frequency(self.state.freq_hz)} (simplex)", "ok"
+            _("Direct on {freq} (simplex)").format(
+                freq=bands.format_frequency(self.state.freq_hz)
+            ),
+            "ok",
         )
         panel.focus_input()
 
     def _load_repeater_by_callsign(self, call: str) -> None:
-        """Support ``/repetidor ED7ZAE`` without opening the list."""
+        """Support ``/repeater ED7ZAE`` without opening the list."""
         panel = self.query_one(EntryPanel)
         repeater = RepeaterService.get_by_callsign(call)
         if repeater is None:
             panel.feedback(
-                f"No hay ningún repetidor dado de alta con el indicativo «{call}»", "error"
+                _("No repeater registered with the callsign «{call}»").format(call=call),
+                "error",
             )
             return
         self._apply_repeater(repeater.id)
 
     def _load_profile_by_name(self, name: str) -> None:
-        """Support ``/perfil HF-Casa`` without opening the selector."""
+        """Support ``/profile HF-Casa`` without opening the selector."""
         panel = self.query_one(EntryPanel)
         needle = name.strip().lower()
         for profile in ProfileService.list_all():
             if profile.name.lower() == needle:
                 ProfileService.apply_to_state(profile.id, self.state)
                 self._refresh_status()
-                panel.feedback(f"Configuración «{profile.name}» cargada", "ok")
+                panel.feedback(
+                    _("Profile «{name}» loaded").format(name=profile.name), "ok"
+                )
                 return
-        panel.feedback(f"No existe la configuración «{name}»", "error")
+        panel.feedback(_("There is no profile «{name}»").format(name=name), "error")
 
-    def action_back_to_entry(self) -> None:
-        """Escape leaves the log and returns to the insert row.
+    async def action_back_to_entry(self) -> None:
+        """Escape leaves the list and returns to the insert row.
 
-        While editing it only abandons the edit, staying on that QSO.
+        While editing it only abandons the edit, staying on that row. It never
+        changes view: that is what the function keys are for.
         """
         if self._modal_open:
             return
         if self._editing_id is not None:
             self._end_edit()
-            self.query_one(EntryPanel).feedback("Edición cancelada.", "info")
+            self.query_one(EntryPanel).feedback(_("Edit cancelled."), "info")
+            return
+        if self._view == "inventory":
+            table = self.query_one(ItemTable)
+            if not table.on_insert_row:
+                table.go_to_insert_row()
             return
         self.query_one(HistoryPanel).go_to_insert_row()
 
     @on(BrowseBar.Action)
     def _on_browse_action(self, event: BrowseBar.Action) -> None:
         """D, E and R act on the QSO the cursor is sitting on."""
+        if self._view == "inventory":
+            self._on_item_action(event.action)
+            return
         history = self.query_one(HistoryPanel)
         row = history.selected_row()
         if row is None:
@@ -658,9 +775,17 @@ class HamrlogApp(App[None]):
     @on(BrowseBar.UnknownKey)
     def _on_unknown_browse_key(self) -> None:
         """Remind the operator that the line is not a text field right now."""
+        if self._view == "inventory":
+            self.query_one(EntryPanel).feedback(
+                _("You are on an item of the list: {keys}").format(keys=_(INVENTORY_BROWSE)),
+                "warning",
+            )
+            return
         self.query_one(EntryPanel).feedback(
-            "Estás sobre un QSO del histórico: D suprimir · E editar · R repetir · "
-            "↓ hasta «<Insertar nuevo>» para escribir",
+            _(
+                "You are on a logged QSO: D delete · E edit · R repeat · "
+                "↓ to «<Insert new>» to type"
+            ),
             "warning",
         )
 
@@ -680,7 +805,12 @@ class HamrlogApp(App[None]):
         self._editing_id = row.id
         self._showing_selection = False
         panel.start_edit(values)
-        panel.feedback(f"Editando el QSO con {row.call} de las {row.qso_utc:%H:%M:%S} UTC", "info")
+        panel.feedback(
+            _("Editing the QSO with {call} at {time} UTC").format(
+                call=row.call, time=f"{row.qso_utc:%H:%M:%S}"
+            ),
+            "info",
+        )
 
     def _end_edit(self) -> None:
         self._editing_id = None
@@ -692,7 +822,7 @@ class HamrlogApp(App[None]):
         row = QsoService.get(qso_id)
         if row is None:
             self._end_edit()
-            panel.feedback("Ese QSO ya no existe.", "warning")
+            panel.feedback(_("That QSO no longer exists."), "warning")
             return
 
         parsed = entry_parser.from_fields(
@@ -701,7 +831,7 @@ class HamrlogApp(App[None]):
             validation=self.state.callsign_validation,
         )
         if not parsed.ok:
-            panel.feedback(parsed.error or "Entrada no válida.", "error")
+            panel.feedback(parsed.error or _("Invalid entry."), "error")
             return
         # The parser drops a value it cannot read and warns; saving then would
         # silently blank a field the operator meant to change.
@@ -729,7 +859,7 @@ class HamrlogApp(App[None]):
             found = bands.from_frequency(int(new_freq))  # type: ignore[call-overload]
             changes["band"] = found.name if found else ""
             if found is None:
-                warnings.append("Frecuencia fuera de las bandas de radioaficionado.")
+                warnings.append(_("Frequency outside the amateur radio bands."))
         if moved and row.repeater_call:
             # The repeater no longer describes where this QSO took place.
             changes.update(freq_tx_hz=None, repeater_id=None, repeater_call="")
@@ -751,7 +881,7 @@ class HamrlogApp(App[None]):
         }
         if not set(changes) - {"repeater_id"}:
             self._end_edit()
-            panel.feedback("Sin cambios.", "info")
+            panel.feedback(_("No changes."), "info")
             return
 
         try:
@@ -764,9 +894,9 @@ class HamrlogApp(App[None]):
         self.query_one(HistoryPanel).replace_row(updated)
         self._refresh_detail(updated)
         self._refresh_stats()
-        message = f"✓ {updated.call} modificado"
+        message = _("✓ {call} updated").format(call=updated.call)
         if moved and updated.band:
-            message += f" · banda {updated.band}"
+            message += _(" · band {band}").format(band=updated.band)
         if warnings:
             panel.feedback(f"{message}   ⚠ {' '.join(warnings)}", "warning")
         else:
@@ -800,17 +930,20 @@ class HamrlogApp(App[None]):
         """
         if self._modal_open:
             return
+        if self._view == "inventory":
+            self._on_item_action("delete")
+            return
         history = self.query_one(HistoryPanel)
         qso_id = history.selected_qso_id()
         if qso_id is None:
             recent = QsoService.recent(limit=1)
             if not recent:
-                self.query_one(EntryPanel).feedback("No hay QSO que borrar.", "warning")
+                self.query_one(EntryPanel).feedback(_("No QSO to delete."), "warning")
                 return
             qso_id = recent[-1].id
         self._confirm_delete(qso_id)
 
-    #: ``/deshacer`` is the command form of the same action.
+    #: ``/undo`` is the command form of the same action.
     action_undo = action_delete_qso
 
     def _confirm_delete(self, qso_id: int) -> None:
@@ -818,11 +951,11 @@ class HamrlogApp(App[None]):
         row = QsoService.get(qso_id)
         panel = self.query_one(EntryPanel)
         if row is None:
-            panel.feedback("Ese QSO ya no existe.", "warning")
+            panel.feedback(_("That QSO no longer exists."), "warning")
             return
         self.push_screen(
             ConfirmScreen(
-                f"¿Borrar el QSO con {row.call}?",
+                _("Delete the QSO with {call}?").format(call=row.call),
                 detail=f"{row.qso_utc:%Y-%m-%d %H:%M:%S} UTC · {row.band or '-'} · "
                 f"{row.mode or '-'}" + (f" · {row.name}" if row.name else ""),
                 danger=True,
@@ -840,8 +973,225 @@ class HamrlogApp(App[None]):
                 return
             self._reload_history()
             self._refresh_stats()
-            panel.feedback("QSO borrado.", "ok")
+            panel.feedback(_("QSO deleted."), "ok")
         panel.focus_input()
+
+    # ---------------------------------------------------------- equipment --
+    @property
+    def _kind(self) -> Kind:
+        return KINDS[self._tab]
+
+    def _draft_key(self) -> str:
+        return "log" if self._view == "log" else self._kind.key
+
+    async def action_function_key(self, key: str) -> None:
+        """F1 to F12, Page Up and Page Down: each view gives them its meaning.
+
+        F1 is the log from anywhere. In the log, F2 opens the inventory view
+        and the page keys move the history ten rows. In the inventory view,
+        F5/F6 and the page keys change tab; F2 does nothing there yet. Over a
+        dialog the key is passed on to it.
+        """
+        if self._modal_open:
+            raise SkipAction()
+        if key == "f1":
+            if self._view != "log":
+                await self._show_view("log")
+            return
+        if self._view == "log":
+            if key == "f2":
+                await self._show_view("inventory")
+            elif key in ("pageup", "pagedown") and self._editing_id is None:
+                delta = -10 if key == "pageup" else 10
+                self.query_one(HistoryPanel).move_selection(delta)
+            return
+        if key in ("f5", "pageup"):
+            await self._show_view("inventory", (self._tab - 1) % len(KINDS))
+        elif key in ("f6", "pagedown"):
+            await self._show_view("inventory", (self._tab + 1) % len(KINDS))
+
+    async def _show_view(self, view: str, tab: int | None = None) -> None:
+        """Turn the main frame and the entry line to the log or to a tab.
+
+        What was half typed is put aside per view and tab and comes back on
+        return, as browsing does with the insert row.
+        """
+        panel = self.query_one(EntryPanel)
+        self._drafts[self._draft_key()] = panel.pending_values
+        self._editing_id = None
+        self._showing_selection = False
+        panel.reset()
+
+        self._view = view
+        if tab is not None:
+            self._tab = tab
+        in_log = view == "log"
+        self.query_one(HistoryPanel).display = in_log
+        self.query_one(InventoryView).display = not in_log
+        self.query_one("#log-frame", Vertical).border_title = (
+            _("Log") if in_log else _("Inventory")
+        )
+
+        if in_log:
+            panel.build_fields(self.state.field_order)
+            panel.set_browse_prompt(BROWSE_PROMPT)
+            panel.edit_keys = EDIT_KEYS
+            panel.set_base_keys("")
+            self._refresh_detail(None)
+        else:
+            panel.build_fields(self._kind.fields, extra=())
+            panel.set_browse_prompt(INVENTORY_BROWSE)
+            panel.edit_keys = INVENTORY_EDIT_KEYS
+            panel.set_base_keys(INVENTORY_KEYS)
+            self._reload_items()
+        await panel.ready()
+        panel.set_suggesters({} if in_log else self._kind.suggesters())
+        panel.set_values(self._drafts.get(self._draft_key(), {}))
+        panel.feedback("")
+        if in_log:
+            self.query_one(HistoryPanel).go_to_insert_row()
+
+    def _reload_items(self, keep_id: int | None = None) -> None:
+        kind = self._kind
+        items = kind.items()
+        brand = self._brands.get(kind.key, "")
+        if brand:
+            items = [item for item in items if item.brand.lower() == brand.lower()]
+        self.query_one(InventoryView).set_tabs(tab_bar(self._tab, brand))
+        self.query_one(ItemTable).show(kind, items, keep_id)
+
+    @on(ItemTable.SelectionChanged)
+    def _on_item_selection(self, event: ItemTable.SelectionChanged) -> None:
+        panel = self.query_one(EntryPanel)
+        detail = self.query_one(DetailPanel)
+        if event.item is None:
+            self._editing_id = None
+            panel.set_browsing(False)
+            detail.show_lines(tuple(_(line) for line in self._kind.guide))
+            if self._showing_selection:
+                panel.feedback("")
+                self._showing_selection = False
+            return
+        detail.show_lines(event.item.detail, locked=event.item.locked)
+        panel.set_browsing(True)
+        if self._showing_selection:
+            panel.feedback("")
+        self._showing_selection = True
+
+    def _on_item_action(self, action: str) -> None:
+        item = self.query_one(ItemTable).selected_item()
+        panel = self.query_one(EntryPanel)
+        if item is None:
+            return
+        if action == "repeat":
+            panel.feedback(
+                _("Nothing to repeat here: {keys}").format(keys=_(INVENTORY_BROWSE)), "warning"
+            )
+            return
+        if item.locked:
+            panel.feedback(
+                _(
+                    "«{name}» is from the catalog: it is neither changed nor deleted. "
+                    "Use it when putting a setup together."
+                ).format(name=item.name),
+                "warning",
+            )
+            return
+        if action == "edit":
+            self._editing_id = item.id
+            self._showing_selection = False
+            panel.start_edit(self._kind.values(item.id))
+            panel.feedback(_("Editing «{name}»").format(name=item.name), "info")
+        elif action == "delete":
+            self.push_screen(
+                ConfirmScreen(
+                    _("Delete «{name}»?").format(name=item.name),
+                    detail=_("{kind}: only this item is deleted.").format(
+                        kind=_(self._kind.title)
+                    ),
+                    danger=True,
+                ),
+                lambda confirmed: self._do_delete_item(item, confirmed),
+            )
+
+    def _do_delete_item(self, item: Item, confirmed: bool | None) -> None:
+        panel = self.query_one(EntryPanel)
+        if confirmed:
+            try:
+                self._kind.delete(item.id)
+            except ServiceError as exc:
+                panel.feedback(str(exc), "error")
+                panel.focus_input()
+                return
+            self._reload_items()
+            self._refresh_status()
+            panel.feedback(_("«{name}» deleted.").format(name=item.name), "ok")
+        panel.focus_input()
+
+    def _save_item(self, item_id: int | None, values: dict[str, str]) -> None:
+        """Create or update an item of the active tab from the entry line."""
+        panel = self.query_one(EntryPanel)
+        try:
+            name = self._kind.save(item_id, values)
+        except ServiceError as exc:
+            panel.feedback(str(exc), "error")
+            return
+        if item_id is not None:
+            self._end_edit()
+            self._reload_items(keep_id=item_id)
+            panel.feedback(_("✓ «{name}» updated").format(name=name), "ok")
+        else:
+            panel.clear()
+            self._reload_items()
+            panel.feedback(_("✓ «{name}» added").format(name=name), "ok")
+        panel.set_suggesters(self._kind.suggesters())
+        self._refresh_status()
+
+    def _filter_brand(self, text: str) -> None:
+        """``/brand Icom``: show only that brand; ``/brand`` alone shows all."""
+        panel = self.query_one(EntryPanel)
+        kind = self._kind
+        if self._view != "inventory" or not kind.has_brands:
+            panel.feedback(
+                _("The brand filter is for Radios, Antennas and Supplies (F2)."), "warning"
+            )
+            return
+        needle = text.strip().lower()
+        if not needle:
+            self._brands[kind.key] = ""
+            self._reload_items()
+            panel.feedback(_("All brands."), "info")
+            return
+        brands = self._brand_list()
+        match = next((b for b in brands if b.lower() == needle), None) or next(
+            (b for b in brands if b.lower().startswith(needle)), None
+        )
+        if match is None:
+            panel.feedback(
+                _("No {items} of the brand «{brand}».").format(
+                    items=_(kind.title).lower(), brand=text.strip()
+                ),
+                "error",
+            )
+            return
+        self._brands[kind.key] = match
+        self._reload_items()
+        panel.feedback(_("Brand {brand}.").format(brand=match), "info")
+
+    def _brand_list(self) -> list[str]:
+        return sorted({item.brand for item in self._kind.items() if item.brand}, key=str.lower)
+
+    def action_cycle_brand(self, delta: int) -> None:
+        """Alt+↑ Alt+↓ walk the brands of the tab, with «all» in between."""
+        if self._view != "inventory" or self._modal_open or not self._kind.has_brands:
+            return
+        if self._editing_id is not None:
+            return
+        options = ["", *self._brand_list()]
+        current = self._brands.get(self._kind.key, "")
+        index = options.index(current) if current in options else 0
+        self._brands[self._kind.key] = options[(index + delta) % len(options)]
+        self._reload_items()
 
     def action_quit(self) -> None:  # type: ignore[override]
         self._persist_state()

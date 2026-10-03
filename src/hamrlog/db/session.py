@@ -16,8 +16,10 @@ from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..paths import database_path, ensure_dirs
+from .codes import assign_missing_codes
 from .migrations import add_missing_columns, upgrade_data
 from .models import CURRENT_SCHEMA_VERSION, Base, SchemaVersion
+from .preseed import apply_preseed
 
 _engine: Engine | None = None
 _session_factory: sessionmaker[Session] | None = None
@@ -61,6 +63,8 @@ def init_engine(url: str | None = None, *, echo: bool = False) -> Engine:
     _session_factory = sessionmaker(bind=_engine, expire_on_commit=False, future=True)
     upgrade_data(_engine, _stored_schema_version())
     _stamp_schema_version()
+    apply_preseed(_engine)
+    assign_missing_codes(_engine)
     return _engine
 
 

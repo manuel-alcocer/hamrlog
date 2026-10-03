@@ -13,6 +13,7 @@ from textual.widgets import Static
 from ...core import bands, modes
 from ...core.dto import QsoRow
 from ...core.state import SessionState
+from ...i18n import _
 
 
 class DetailPanel(Static):
@@ -30,7 +31,7 @@ class DetailPanel(Static):
         text.append(row.call, style="bold white")
         _chunk(text, row.name)
         _chunk(text, _place(row))
-        _chunk(text, row.country, "dim")
+        _chunk(text, _(row.country) if row.country else "", "dim")
         text.append("   ")
         text.append(f" {kind[0]} ", style=kind[1])
         text.append("\n")
@@ -41,7 +42,7 @@ class DetailPanel(Static):
         _chunk(text, row.mode, "green")
         _chunk(text, f"{row.rst_sent}/{row.rst_rcvd}".strip("/"))
         if row.repeater_call:
-            _chunk(text, f"vía {row.repeater_call}", "bold bright_red")
+            _chunk(text, _("via {call}").format(call=row.repeater_call), "bold bright_red")
         text.append("\n")
 
         third = Text(no_wrap=True, overflow="ellipsis")
@@ -72,20 +73,22 @@ class DetailPanel(Static):
         """Show what a QSO written now would inherit."""
         text = Text(no_wrap=True, overflow="ellipsis")
 
-        text.append("NUEVO CONTACTO", style="bold green")
+        text.append(_("NEW CONTACT"), style="bold green")
         text.append("   ")
-        text.append("la fecha y la hora UTC se ponen al pulsar Enter", style="dim italic")
+        text.append(
+            _("the UTC date and time are set when you press Enter"), style="dim italic"
+        )
         text.append("\n")
 
         second = Text(no_wrap=True, overflow="ellipsis")
-        _chunk(second, operator or "sin operador", "bold cyan")
-        _chunk(second, state.band or "sin banda", "bold yellow")
+        _chunk(second, operator or _("no operator"), "bold cyan")
+        _chunk(second, state.band or _("no band"), "bold yellow")
         _chunk(second, bands.format_frequency(state.freq_hz), "yellow")
         if state.via_repeater:
-            _chunk(second, f"vía {state.repeater_call}", "bold bright_red")
+            _chunk(second, _("via {call}").format(call=state.repeater_call), "bold bright_red")
             if state.freq_tx_hz:
                 _chunk(second, f"TX {bands.format_frequency(state.freq_tx_hz)}", "dim")
-        _chunk(second, state.mode or "sin modo", "bold green")
+        _chunk(second, state.mode or _("no mode"), "bold green")
         digital = modes.status_summary(state.digital_data, has_repeater=state.via_repeater)
         if digital:
             _chunk(second, digital, "magenta")
@@ -95,13 +98,29 @@ class DetailPanel(Static):
         third = Text(no_wrap=True, overflow="ellipsis")
         if station:
             _chunk(third, station)
-        _chunk(third, f"informe por defecto {modes.default_rst(state.mode)}", "dim")
+        _chunk(
+            third,
+            _("default report {rst}").format(rst=modes.default_rst(state.mode)),
+            "dim",
+        )
         if state.autofill_from_book:
-            _chunk(third, "nombre y QTH se rellenan desde la agenda", "dim")
+            _chunk(third, _("name and QTH are filled in from the address book"), "dim")
         if stats_line:
             _chunk(third, stats_line, "dim")
         text.append(third)
 
+        self.update(text)
+
+    def show_lines(self, lines: tuple[str, ...], *, locked: bool = False) -> None:
+        """Up to three plain lines, the first one bold: used by the inventory view."""
+        text = Text(no_wrap=True, overflow="ellipsis")
+        for index, line in enumerate(lines[:3]):
+            if index:
+                text.append("\n")
+            style = "bold white" if index == 0 else "white"
+            if locked and index == 2:
+                style = "italic dim"
+            text.append(line, style=style)
         self.update(text)
 
     def show_nothing(self) -> None:

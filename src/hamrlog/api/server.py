@@ -19,6 +19,7 @@ from typing import Any
 from .. import __version__
 from ..core.services import OperatorService, QsoService
 from ..db.session import init_engine
+from ..i18n import _
 from .schemas import qso_to_dict, stats_to_dict
 
 
@@ -32,7 +33,7 @@ def create_app(database_url: str | None = None) -> Any:
         from fastapi import FastAPI, HTTPException, Query
     except ImportError as exc:  # pragma: no cover - depends on the environment
         raise ImportError(
-            "La API necesita el extra: pip install hamrlog[api]"
+            _("The API needs the extra: pip install hamrlog[api]")
         ) from exc
 
     init_engine(database_url)
@@ -66,7 +67,7 @@ def create_app(database_url: str | None = None) -> Any:
     def qso(qso_id: int) -> dict[str, Any]:
         row = QsoService.get(qso_id)
         if row is None:
-            raise HTTPException(status_code=404, detail="Contacto no encontrado")
+            raise HTTPException(status_code=404, detail=_("Contact not found"))
         return qso_to_dict(row)
 
     @application.get("/stats")

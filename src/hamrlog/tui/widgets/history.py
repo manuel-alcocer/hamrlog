@@ -4,7 +4,7 @@ The table is never focused. The entry line keeps the keyboard at all times and
 the arrow keys move this cursor from there, so the operator never has to think
 about which pane has focus in the middle of a pile-up.
 
-The list always carries one extra row, ``<Insertar nuevo>``, sitting where the
+The list always carries one extra row, ``<Insert new>``, sitting where the
 next QSO will appear. That row is "I am writing a new one", which makes the
 position of the cursor the whole state of the main screen: on the insert row
 you are logging, anywhere else you are looking at what is already logged.
@@ -20,28 +20,30 @@ from textual.widgets import DataTable
 
 from ...core import bands, units
 from ...core.dto import QsoRow
+from ...i18n import N_, _
 
 #: Row key of the insert row. QSO rows are keyed by their id.
 INSERT_ROW_KEY = "__insert__"
 
-#: Label of the insert row.
-INSERT_LABEL = "<Insertar nuevo>"
+#: Label of the insert row, translated where it is drawn.
+INSERT_LABEL = N_("<Insert new>")
 
 #: Newest last (the log grows downwards) or newest first.
 ORDER_OLDEST_FIRST = "asc"
 ORDER_NEWEST_FIRST = "desc"
 
 #: (column label, width). None width lets the column take the remaining space.
+#: The English label is the column key; the heading shown is its translation.
 COLUMNS: tuple[tuple[str, int | None], ...] = (
-    ("FECHA HORA", 19),
-    ("INDICATIVO", 12),
-    ("NOMBRE", 11),
-    ("BANDA", 6),
-    ("FRECUENCIA", 12),
-    ("MODO", 7),
-    ("E/R", 8),
-    ("PAÍS", 14),
-    ("NOTAS", None),
+    (N_("DATE TIME"), 19),
+    (N_("CALLSIGN"), 12),
+    (N_("NAME"), 11),
+    (N_("BAND"), 6),
+    (N_("FREQUENCY"), 12),
+    (N_("MODE"), 7),
+    (N_("RST"), 8),
+    (N_("COUNTRY"), 14),
+    (N_("NOTES"), None),
 )
 
 
@@ -75,15 +77,15 @@ class HistoryPanel(DataTable):
         Repeating "MHz" on every row wastes the width the number needs, so
         the unit is stated once at the top.
         """
-        if label == "FRECUENCIA":
+        if label == "FREQUENCY":
             # Abbreviated so the heading with its unit fits the column the
             # numbers need.
-            return f"FREC ({units.active().unit})"
-        return label
+            return _("FREQ ({unit})").format(unit=units.active().unit)
+        return _(label)
 
     def refresh_headers(self) -> None:
         """Redraw the headings after the frequency format changed."""
-        for label, _ in COLUMNS:
+        for label, _width in COLUMNS:
             column = self.columns.get(label)
             if column is not None:
                 column.label = Text(self._header(label), style="bold")
@@ -102,7 +104,7 @@ class HistoryPanel(DataTable):
 
     @property
     def on_insert_row(self) -> bool:
-        """True when the cursor is on ``<Insertar nuevo>``."""
+        """True when the cursor is on ``<Insert new>``."""
         return self.selected_qso_id() is None
 
     def set_order(self, order: str) -> None:
@@ -187,7 +189,7 @@ class HistoryPanel(DataTable):
         it without truncating.
         """
         cells = [Text("") for _ in COLUMNS]
-        cells[0] = Text(f"▸ {INSERT_LABEL}", style="bold green")
+        cells[0] = Text(f"▸ {_(INSERT_LABEL)}", style="bold green")
         self.add_row(*cells, key=INSERT_ROW_KEY)
 
     def _append(self, row: QsoRow) -> None:
@@ -196,7 +198,7 @@ class HistoryPanel(DataTable):
     def replace_row(self, row: QsoRow) -> None:
         """Redraw one QSO after an edit, leaving the cursor where it is."""
         self._rows = [row if known.id == row.id else known for known in self._rows]
-        for (label, _), cell in zip(COLUMNS, self._cells(row), strict=True):
+        for (label, _width), cell in zip(COLUMNS, self._cells(row), strict=True):
             self.update_cell(str(row.id), label, cell)
 
     def _cells(self, row: QsoRow) -> list[Text]:
@@ -209,7 +211,7 @@ class HistoryPanel(DataTable):
             Text(bands.format_frequency(row.freq_hz, with_unit=False)),
             Text(row.mode or "-", style="green"),
             Text(f"{row.rst_sent}/{row.rst_rcvd}".strip("/") or "-"),
-            Text(row.country or "-", style="dim"),
+            Text(_(row.country) if row.country else "-", style="dim"),
             Text(self._notes(row), style="dim"),
         ]
 
@@ -218,7 +220,7 @@ class HistoryPanel(DataTable):
         """Comment plus any detail worth showing inline."""
         parts = []
         if row.repeater_call:
-            parts.append(f"vía {row.repeater_call}")
+            parts.append(_("via {call}").format(call=row.repeater_call))
         if row.qth:
             parts.append(row.qth)
         digital = row.digital_data or {}

@@ -18,6 +18,7 @@ from ..adif import read_adif_file, write_adif_file
 from ..adif.reader import AdifRecord
 from ..db.models import Contact, EntryMode, Qso
 from ..db.session import session_scope
+from ..i18n import _
 from ..paths import export_dir
 from . import bands, callsign
 from . import contacts as contact_files
@@ -53,9 +54,14 @@ class ImportReport:
 
     @property
     def summary(self) -> str:
-        return (
-            f"{self.imported} importados, {self.skipped_duplicate} duplicados, "
-            f"{self.skipped_invalid} inválidos de {self.total} registros."
+        return _(
+            "{imported} imported, {duplicates} duplicates, {invalid} invalid "
+            "of {total} records."
+        ).format(
+            imported=self.imported,
+            duplicates=self.skipped_duplicate,
+            invalid=self.skipped_invalid,
+            total=self.total,
         )
 
 
@@ -170,7 +176,7 @@ def import_adif(
 
     fallback = OperatorService.get(operator_id)
     if fallback is None:
-        raise ServiceError("Operador de destino no encontrado.")
+        raise ServiceError(_("Target operator not found."))
 
     operator_ids = {op.callsign: op.id for op in OperatorService.list_all(include_inactive=True)}
     station_ids = {st.name: st.id for st in StationService.list_all()}

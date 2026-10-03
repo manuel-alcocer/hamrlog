@@ -42,7 +42,7 @@ def test_named_field_is_not_overwritten_by_position():
 
 
 def test_country_is_detected_from_the_prefix():
-    assert entry.parse("dl2jkl", mode_name="SSB").fields["country"] == "Alemania"
+    assert entry.parse("dl2jkl", mode_name="SSB").fields["country"] == "Germany"
 
 
 def test_missing_callsign_is_an_error():

@@ -7,6 +7,7 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from ...core import bands, modes
+from ...i18n import _
 
 
 class StatusLine(Static):
@@ -33,17 +34,17 @@ class StatusLine(Static):
                 text.append(f"{label} ", style="dim")
             text.append(value, style=style)
 
-        chunk("OP", self.operator or "sin operador", "bold cyan")
-        chunk("BANDA", self.band or "-", "bold yellow")
+        chunk("OP", self.operator or _("no operator"), "bold cyan")
+        chunk(_("BAND"), self.band or "-", "bold yellow")
         chunk("QRG", bands.format_frequency(self.freq_hz), "bold yellow")
         # Working through a repeater changes where the signal goes, so it is
         # shown right next to the frequency it applies to.
-        chunk("VÍA", self.repeater, "bold bright_red")
+        chunk(_("VIA"), self.repeater, "bold bright_red")
 
         mode = modes.get(self.mode)
         mode_style = "bold magenta" if mode and mode.is_digital else "bold green"
-        chunk("MODO", self.mode or "-", mode_style)
+        chunk(_("MODE"), self.mode or "-", mode_style)
         chunk("", self.digital_summary, "magenta")
-        chunk("EQUIPO", self.station, "white")
-        chunk("CONFIG", self.profile or "(sin guardar)", "bold blue")
+        chunk(_("RIG"), self.station, "white")
+        chunk("CONFIG", self.profile or _("(unsaved)"), "bold blue")
         return text

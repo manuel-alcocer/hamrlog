@@ -12,6 +12,7 @@ import sys
 from . import __version__
 from .core import contacts as contact_files
 from .db.session import default_database_url, init_engine
+from .i18n import _
 from .paths import config_dir, data_dir, export_dir
 
 
@@ -47,77 +48,77 @@ def _configure_console() -> None:
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="hamrlog",
-        description="Diario de radioaficionado para consola (Linux, Windows y macOS).",
+        description=_("Amateur radio logbook for the console (Linux, Windows and macOS)."),
     )
     parser.add_argument("--version", action="version", version=f"hamrlog {__version__}")
     parser.add_argument(
         "--database",
         metavar="URL",
-        help="URL SQLAlchemy de la base de datos (por defecto, SQLite local).",
+        help=_("SQLAlchemy URL of the database (local SQLite by default)."),
     )
 
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("run", help="Abre la interfaz de texto (por defecto).")
-    sub.add_parser("info", help="Muestra rutas, base de datos y versión.")
+    sub.add_parser("run", help=_("Open the text interface (default)."))
+    sub.add_parser("info", help=_("Show paths, database and version."))
 
-    export = sub.add_parser("export", help="Exporta el log sin abrir la interfaz.")
-    export.add_argument("path", nargs="?", help="Fichero de destino.")
+    export = sub.add_parser("export", help=_("Export the log without opening the interface."))
+    export.add_argument("path", nargs="?", help=_("Destination file."))
     export.add_argument(
-        "--format", choices=("adif", "csv"), default="adif", help="Formato de salida."
+        "--format", choices=("adif", "csv"), default="adif", help=_("Output format.")
     )
 
-    importer = sub.add_parser("import", help="Importa un fichero ADIF.")
-    importer.add_argument("path", help="Fichero .adi a importar.")
+    importer = sub.add_parser("import", help=_("Import an ADIF file."))
+    importer.add_argument("path", help=_(".adi file to import."))
     importer.add_argument(
-        "--operator", required=True, help="Indicativo del operador de destino."
+        "--operator", required=True, help=_("Callsign of the target operator.")
     )
     importer.add_argument(
         "--force-operator",
         action="store_true",
-        help="Asigna todos los contactos al operador indicado, ignorando el del fichero.",
+        help=_("Assign every contact to the given operator, ignoring the one in the file."),
     )
 
-    metrics = sub.add_parser("metrics", help="Arranca solo el exportador Prometheus.")
-    metrics.add_argument("--port", type=int, default=9119, help="Puerto HTTP.")
+    metrics = sub.add_parser("metrics", help=_("Start only the Prometheus exporter."))
+    metrics.add_argument("--port", type=int, default=9119, help=_("HTTP port."))
 
-    contacts = sub.add_parser("contacts", help="Agenda de contactos (listín).")
+    contacts = sub.add_parser("contacts", help=_("Contact address book."))
     contacts_sub = contacts.add_subparsers(dest="contacts_command", required=True)
 
     contacts_import = contacts_sub.add_parser(
-        "import", help="Importa una lista de contactos (CSV o JSON, formato detectado)."
+        "import", help=_("Import a contact list (CSV or JSON, format detected).")
     )
-    contacts_import.add_argument("path", help="Fichero a importar.")
+    contacts_import.add_argument("path", help=_("File to import."))
     contacts_import.add_argument(
-        "--country", default="", help="Importar solo el país indicado, p. ej. Spain."
+        "--country", default="", help=_("Import only the given country, e.g. Spain.")
     )
     contacts_import.add_argument(
         "--no-update",
         action="store_true",
-        help="No tocar los contactos que ya están en la agenda.",
+        help=_("Leave alone the contacts already in the address book."),
     )
 
-    contacts_export = contacts_sub.add_parser("export", help="Exporta la agenda.")
-    contacts_export.add_argument("path", nargs="?", help="Fichero de destino.")
+    contacts_export = contacts_sub.add_parser("export", help=_("Export the address book."))
+    contacts_export.add_argument("path", nargs="?", help=_("Destination file."))
     contacts_export.add_argument(
         "--format",
         choices=tuple(contact_files.EXPORT_FORMATS),
         default="hamrlog",
-        help="Formato de salida.",
+        help=_("Output format."),
     )
 
-    contacts_list = contacts_sub.add_parser("list", help="Busca en la agenda.")
-    contacts_list.add_argument("query", nargs="?", default="", help="Texto a buscar.")
-    contacts_list.add_argument("--limit", type=int, default=50, help="Máximo de filas.")
+    contacts_list = contacts_sub.add_parser("list", help=_("Search the address book."))
+    contacts_list.add_argument("query", nargs="?", default="", help=_("Text to search for."))
+    contacts_list.add_argument("--limit", type=int, default=50, help=_("Maximum number of rows."))
 
     return parser
 
 
 def _cmd_info() -> int:
     print(f"hamrlog {__version__}")
-    print(f"Base de datos : {default_database_url()}")
-    print(f"Datos         : {data_dir()}")
-    print(f"Configuración : {config_dir()}")
-    print(f"Exportaciones : {export_dir()}")
+    print(_("Database      : {value}").format(value=default_database_url()))
+    print(_("Data          : {value}").format(value=data_dir()))
+    print(_("Configuration : {value}").format(value=config_dir()))
+    print(_("Exports       : {value}").format(value=export_dir()))
     return 0
 
 
@@ -128,7 +129,7 @@ def _cmd_export(path: str | None, output_format: str) -> int:
         target, count = transfer.export_adif(path)
     else:
         target, count = transfer.export_csv(path)
-    print(f"{count} contactos exportados a {target}")
+    print(_("Exported {count} contacts to {path}").format(count=count, path=target))
     return 0
 
 
@@ -138,7 +139,10 @@ def _cmd_import(path: str, operator: str, force_operator: bool) -> int:
 
     found = OperatorService.get_by_callsign(operator)
     if found is None:
-        print(f"No existe el operador {operator.upper()}.", file=sys.stderr)
+        print(
+            _("There is no operator {callsign}.").format(callsign=operator.upper()),
+            file=sys.stderr,
+        )
         return 1
     report = transfer.import_adif(
         path, operator_id=found.id, respect_file_operator=not force_operator
@@ -160,32 +164,38 @@ def _cmd_contacts(args: argparse.Namespace) -> int:
             update_existing=not args.no_update,
             country_filter=args.country,
         )
-        print(f"Formato detectado: {summary.format_name}")
+        print(_("Detected format: {name}").format(name=summary.format_name))
         print(summary.text)
         for warning in summary.warnings:
-            print(f"  aviso: {warning}", file=sys.stderr)
+            print("  " + _("warning: {warning}").format(warning=warning), file=sys.stderr)
         return 0 if (summary.created or summary.updated) else 1
 
     if args.contacts_command == "export":
         target, count = transfer.export_contacts(
             args.path, export_format=args.format
         )
-        print(f"{count} contactos exportados a {target}")
+        print(_("Exported {count} contacts to {path}").format(count=count, path=target))
         if args.format == "anytone":
-            print("Los contactos sin ID DMR no se exportan: la radio los ignora.")
+            print(_("Contacts without a DMR ID are not exported: the radio ignores them."))
         return 0
 
     rows = ContactService.search(args.query, limit=args.limit)
     if not rows:
-        print("Sin resultados." if args.query else "La agenda está vacía.")
+        print(_("No results.") if args.query else _("The address book is empty."))
         return 0
-    print(f"{'INDICATIVO':<12} {'NOMBRE':<24} {'CIUDAD':<16} {'DMR ID':<10} {'QSO':>4}")
+    print(
+        f"{_('CALLSIGN'):<12} {_('NAME'):<24} {_('CITY'):<16} "
+        f"{'DMR ID':<10} {'QSO':>4}"
+    )
     for row in rows:
         print(
             f"{row.callsign:<12} {row.full_name[:24]:<24} {row.city[:16]:<16} "
             f"{row.dmr_id or '':<10} {row.qso_count or '':>4}"
         )
-    print(f"\n{len(rows)} de {ContactService.count()} contactos.")
+    summary = _("{shown} of {total} contacts.").format(
+        shown=len(rows), total=ContactService.count()
+    )
+    print(f"\n{summary}")
     return 0
 
 

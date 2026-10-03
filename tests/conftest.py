@@ -14,6 +14,14 @@ from hamrlog.core.state import SessionState
 from hamrlog.db import session as db_session
 
 
+@pytest.fixture(autouse=True, scope="session")
+def spanish_interface():
+    """The tests read the interface in Spanish, the language it was written for."""
+    from hamrlog import i18n
+
+    i18n.set_language("es")
+
+
 @pytest.fixture(autouse=True)
 def default_frequency_format():
     """Frequency presentation is module-level state; reset it per test."""
@@ -33,6 +41,8 @@ def temp_database(tmp_path, monkeypatch):
     url = f"sqlite:///{(tmp_path / 'test.sqlite3').as_posix()}"
     monkeypatch.setenv("HAMRLOG_HOME", str(tmp_path))
     monkeypatch.setenv("HAMRLOG_DATABASE_URL", url)
+    # Most tests count rows; the catalog has its own tests.
+    monkeypatch.setenv("HAMRLOG_PRESEED", "0")
     db_session.dispose()
     db_session.init_engine(url)
     yield

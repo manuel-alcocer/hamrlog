@@ -9,9 +9,11 @@ from textual.reactive import reactive
 from textual.widgets import Static
 
 from ...core.dto import LogStats
+from ...i18n import N_, _
 
-#: Shown at the right edge, so the way out is always discoverable.
-HELP_HINT = "Ctrl+Q Salir"
+#: Shown at the right edge, so the menus and the way out stay discoverable.
+#: Translated where it is drawn.
+HELP_HINT = N_("F1 Log · F2 Inventory · Ctrl+Q Quit")
 
 
 class StatsFooter(Static):
@@ -40,9 +42,9 @@ class StatsFooter(Static):
                 text.append(str(value), style="bold")
 
             chunk("QSO", stats.total)
-            chunk("hoy", stats.today)
-            chunk("únicos", stats.unique_calls)
-            chunk("países", stats.countries)
+            chunk(_("today"), stats.today)
+            chunk(_("unique"), stats.unique_calls)
+            chunk(_("countries"), stats.countries)
             if stats.by_band:
                 top = sorted(stats.by_band.items(), key=lambda item: -item[1])[:3]
                 text.append("   ")
@@ -52,11 +54,12 @@ class StatsFooter(Static):
 
         # Pad so the hint sits flush against the right edge, dropping it
         # entirely when the terminal is too narrow to hold both.
+        hint = _(HELP_HINT)
         width = self.size.width
-        padding = width - text.cell_len - len(HELP_HINT) - 1
+        padding = width - text.cell_len - len(hint) - 1
         if width and padding >= 2:
             text.append(" " * padding)
-            text.append(HELP_HINT, style="dim")
+            text.append(hint, style="dim")
             text.append(" ")
         return text
 

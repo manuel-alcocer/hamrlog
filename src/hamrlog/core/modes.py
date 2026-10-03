@@ -10,8 +10,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..i18n import N_, _
+
 # Extra fields a digital mode needs beyond the common QSO data. The keys match
 # the columns of Qso.digital_data so screens can be generated from this table.
+# Labels are English, marked with N_(); translate them with _() where shown.
 DigitalField = tuple[str, str]  # (key, label shown in the UI)
 
 
@@ -48,26 +51,26 @@ class Mode:
 
 _DMR_FIELDS: tuple[DigitalField, ...] = (
     ("talkgroup", "Talkgroup (TG)"),
-    ("network", "Red (Brandmeister, TGIF, DMR+)"),
+    ("network", N_("Network (Brandmeister, TGIF, DMR+)")),
     ("color_code", "Color Code"),
-    ("repeater", "Repetidor / hotspot"),
+    ("repeater", N_("Repeater / hotspot")),
 )
 _DSTAR_FIELDS: tuple[DigitalField, ...] = (
-    ("reflector", "Reflector (p. ej. REF001C)"),
-    ("gateway", "Gateway / repetidor"),
+    ("reflector", N_("Reflector (e.g. REF001C)")),
+    ("gateway", N_("Gateway / repeater")),
 )
 _C4FM_FIELDS: tuple[DigitalField, ...] = (
     ("room", "Room Wires-X"),
     ("dg_id", "DG-ID"),
-    ("repeater", "Repetidor / hotspot"),
+    ("repeater", N_("Repeater / hotspot")),
 )
 _M17_FIELDS: tuple[DigitalField, ...] = (
     ("reflector", "Reflector"),
-    ("module", "Módulo"),
+    ("module", N_("Module")),
 )
 _NET_FIELDS: tuple[DigitalField, ...] = (
-    ("network", "Red / servidor"),
-    ("repeater", "Nodo"),
+    ("network", N_("Network / server")),
+    ("repeater", N_("Node")),
 )
 
 # Analogue and CW modes.
@@ -114,17 +117,18 @@ BY_NAME: dict[str, Mode] = {mode.name: mode for mode in MODES}
 DEFAULT_MODE = "SSB"
 
 
-#: Compact labels for the digital extras, used where space is tight.
+#: Compact labels for the digital extras, used where space is tight. English,
+#: translated with _() where shown.
 SHORT_FIELD_NAMES: dict[str, str] = {
     "talkgroup": "TG",
-    "network": "Red",
+    "network": N_("Network"),
     "color_code": "CC",
-    "repeater": "Repetidor",
+    "repeater": N_("Repeater"),
     "reflector": "Reflector",
     "gateway": "Gateway",
     "room": "Room",
     "dg_id": "DG-ID",
-    "module": "Módulo",
+    "module": N_("Module"),
 }
 
 
@@ -157,7 +161,9 @@ def status_summary(digital_data: dict[str, str], *, has_repeater: bool = False) 
 
 def short_fields(mode: Mode) -> str:
     """Comma separated short names of a mode's extra fields."""
-    return ", ".join(SHORT_FIELD_NAMES.get(key, key) for key, _ in mode.digital_fields)
+    return ", ".join(
+        _(SHORT_FIELD_NAMES.get(key, key)) for key, _label in mode.digital_fields
+    )
 
 
 def get(name: str | None) -> Mode | None:

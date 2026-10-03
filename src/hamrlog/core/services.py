@@ -13,22 +13,29 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import joinedload, selectinload
 
+from ..db.codes import next_code
 from ..db.models import (
     Antenna,
     Contact,
     EntryMode,
+    Equipment,
     Operator,
+    PowerSupply,
     Profile,
     Qso,
     Repeater,
     Setting,
     Station,
     StationType,
+    equipment_antenna_links,
+    equipment_station_links,
+    equipment_supply_links,
     station_antenna_links,
     station_profile_links,
     station_type_links,
 )
 from ..db.session import session_scope
+from ..i18n import _
 from . import bands, modes, repeaters
 from . import callsign as callsign_module
 from .dto import ContactRow, LogStats, QsoRow
@@ -84,13 +91,15 @@ class OperatorService:
     def create(call: str, name: str = "", gridsquare: str = "", qth: str = "") -> Operator:
         normalized = callsign_module.normalize(call)
         if not normalized:
-            raise ServiceError("El indicativo del operador no puede estar vacío.")
+            raise ServiceError(_("The operator callsign cannot be empty."))
         with session_scope() as session:
             existing = session.scalars(
                 select(Operator).where(Operator.callsign == normalized)
             ).first()
             if existing is not None:
-                raise ServiceError(f"El operador {normalized} ya existe.")
+                raise ServiceError(
+                    _("Operator {call} already exists.").format(call=normalized)
+                )
             operator = Operator(
                 callsign=normalized,
                 name=name.strip(),
@@ -106,7 +115,7 @@ class OperatorService:
         with session_scope() as session:
             operator = session.get(Operator, operator_id)
             if operator is None:
-                raise ServiceError("Operador no encontrado.")
+                raise ServiceError(_("Operator not found."))
             for key, value in changes.items():
                 if hasattr(operator, key):
                     setattr(operator, key, value)
@@ -119,7 +128,7 @@ class OperatorService:
         with session_scope() as session:
             operator = session.get(Operator, operator_id)
             if operator is None:
-                raise ServiceError("Operador no encontrado.")
+                raise ServiceError(_("Operator not found."))
             operator.is_active = False
 
 
@@ -128,7 +137,7 @@ class OperatorService:
 # --------------------------------------------------------------------------- #
 
 class StationService:
-    """Rigs, each with the antennas it can use."""
+    """Radios («emisoras»), each with the antennas it can use."""
 
     @staticmethod
     def _query():  # type: ignore[no-untyped-def]
@@ -159,17 +168,25 @@ class StationService:
         power_w: int | None = None,
         notes: str = "",
         type_ids: list[int] | None = None,
+        brand: str = "",
     ) -> Station:
         clean = name.strip()
         if not clean:
-            raise ServiceError("El nombre del equipo no puede estar vacío.")
+            raise ServiceError(_("The radio name cannot be empty."))
         with session_scope() as session:
-            if session.scalars(select(Station).where(Station.name == clean)).first():
-                raise ServiceError(f"Ya existe un equipo llamado «{clean}».")
+            if _station_named(session, clean) is not None:
+                raise ServiceError(
+                    _("There is already a radio called «{name}».").format(name=clean)
+                )
             station = Station(
-                name=clean, rig=rig.strip(), power_w=power_w, notes=notes.strip()
+                name=clean,
+                brand=brand.strip(),
+                rig=rig.strip(),
+                power_w=power_w,
+                notes=notes.strip(),
             )
             station.types = _load_types(session, type_ids or [])
+            station.code = next_code(session, Station)
             session.add(station)
             session.flush()
             return station
@@ -180,7 +197,19 @@ class StationService:
         with session_scope() as session:
             station = session.get(Station, station_id)
             if station is None:
-                raise ServiceError("Equipo no encontrado.")
+                raise ServiceError(_("Radio not found."))
+            _refuse_preset(station, _("«{name}» is a catalog radio"))
+            if "name" in changes:
+                changes["name"] = str(changes["name"]).strip()
+                if not changes["name"]:
+                    raise ServiceError(_("The radio name cannot be empty."))
+                other = _station_named(session, changes["name"])
+                if other is not None and other.id != station_id:
+                    raise ServiceError(
+                        _("There is already a radio called «{name}».").format(
+                            name=changes["name"]
+                        )
+                    )
             for key, value in changes.items():
                 if hasattr(station, key):
                     setattr(station, key, value)
@@ -194,7 +223,24 @@ class StationService:
         with session_scope() as session:
             station = session.get(Station, station_id)
             if station is None:
-                raise ServiceError("Equipo no encontrado.")
+                raise ServiceError(_("Radio not found."))
+            _refuse_preset(station, _("«{name}» is a catalog radio"))
+            # A set must keep at least one radio.
+            for equipment in session.scalars(
+                select(Equipment).options(selectinload(Equipment.stations))
+            ):
+                if [s.id for s in equipment.stations] == [station_id]:
+                    raise ServiceError(
+                        _(
+                            "«{radio}» is the only radio of the set «{equipment}»: "
+                            "add another or delete the set first."
+                        ).format(radio=station.name, equipment=equipment.name)
+                    )
+            session.execute(
+                equipment_station_links.delete().where(
+                    equipment_station_links.c.station_id == station_id
+                )
+            )
             # Detach the station from past QSOs instead of losing the contacts.
             # Its type and configuration links go with it; the configurations
             # themselves stay, they may belong to other stations.
@@ -211,7 +257,7 @@ class StationService:
             station = session.get(Station, station_id)
             antenna = session.get(Antenna, antenna_id)
             if station is None or antenna is None:
-                raise ServiceError("Equipo o antena no encontrados.")
+                raise ServiceError(_("Radio or antenna not found."))
             if antenna not in station.antennas:
                 station.antennas.append(antenna)
 
@@ -227,12 +273,34 @@ class StationService:
             )
 
 
+def _refuse_preset(item: Any, what: str) -> None:
+    """Catalog items are shared reference data: never changed or deleted.
+
+    Args:
+        item: The radio, antenna or power supply about to change.
+        what: Translated start of the message, naming the item with a
+            ``{name}`` placeholder, e.g. "«{name}» is a catalog antenna".
+    """
+    if getattr(item, "preset", False):
+        raise ServiceError(
+            _("{what}: it cannot be changed or deleted. Use it when building a set.").format(
+                what=what.format(name=item.name)
+            )
+        )
+
+
+def _station_named(session: Any, name: str) -> Station | None:
+    return session.scalars(
+        select(Station).where(func.lower(Station.name) == name.lower())
+    ).first()
+
+
 def _load_types(session: Any, type_ids: list[int]) -> list[StationType]:
     if not type_ids:
         return []
     found = list(session.scalars(select(StationType).where(StationType.id.in_(type_ids))))
     if len(found) != len(set(type_ids)):
-        raise ServiceError("Alguno de los tipos de equipo ya no existe.")
+        raise ServiceError(_("One of the equipment types no longer exists."))
     return found
 
 
@@ -258,7 +326,7 @@ class StationTypeService:
         clean, low, high = _validate_type(name, min_hz, max_hz)
         with session_scope() as session:
             if _type_named(session, clean) is not None:
-                raise ServiceError(f"Ya existe el tipo «{clean}».")
+                raise ServiceError(_("The type «{name}» already exists.").format(name=clean))
             station_type = StationType(name=clean, min_hz=low, max_hz=high)
             session.add(station_type)
             session.flush()
@@ -270,10 +338,10 @@ class StationTypeService:
         with session_scope() as session:
             station_type = session.get(StationType, type_id)
             if station_type is None:
-                raise ServiceError("Tipo de equipo no encontrado.")
+                raise ServiceError(_("Equipment type not found."))
             other = _type_named(session, clean)
             if other is not None and other.id != type_id:
-                raise ServiceError(f"Ya existe el tipo «{clean}».")
+                raise ServiceError(_("The type «{name}» already exists.").format(name=clean))
             station_type.name = clean
             station_type.min_hz = low
             station_type.max_hz = high
@@ -285,7 +353,7 @@ class StationTypeService:
         with session_scope() as session:
             station_type = session.get(StationType, type_id)
             if station_type is None:
-                raise ServiceError("Tipo de equipo no encontrado.")
+                raise ServiceError(_("Equipment type not found."))
             # The ORM only clears link rows for relationships it knows from
             # this side, and types do not list their stations.
             session.execute(
@@ -308,9 +376,7 @@ class StationTypeService:
                 continue
             type_id = known.get(name.lower())
             if type_id is None:
-                raise ServiceError(
-                    f"No existe el tipo «{name}»."
-                )
+                raise ServiceError(_("There is no type «{name}».").format(name=name))
             if type_id not in ids:
                 ids.append(type_id)
         return ids
@@ -330,27 +396,36 @@ class AntennaService:
             return session.get(Antenna, antenna_id)
 
     @staticmethod
-    def create(name: str, bands: list[str] | None = None, notes: str = "") -> Antenna:
+    def create(
+        name: str, bands: list[str] | None = None, notes: str = "", brand: str = ""
+    ) -> Antenna:
         clean = _antenna_name(name)
         with session_scope() as session:
             if _antenna_named(session, clean) is not None:
-                raise ServiceError(f"Ya existe la antena «{clean}».")
-            antenna = Antenna(name=clean, bands=list(bands or []), notes=notes.strip())
+                raise ServiceError(_("The antenna «{name}» already exists.").format(name=clean))
+            antenna = Antenna(
+                name=clean, brand=brand.strip(), bands=list(bands or []), notes=notes.strip()
+            )
+            antenna.code = next_code(session, Antenna)
             session.add(antenna)
             session.flush()
             return antenna
 
     @staticmethod
-    def update(antenna_id: int, name: str, bands: list[str], notes: str = "") -> Antenna:
+    def update(
+        antenna_id: int, name: str, bands: list[str], notes: str = "", brand: str = ""
+    ) -> Antenna:
         clean = _antenna_name(name)
         with session_scope() as session:
             antenna = session.get(Antenna, antenna_id)
             if antenna is None:
-                raise ServiceError("Antena no encontrada.")
+                raise ServiceError(_("Antenna not found."))
+            _refuse_preset(antenna, _("«{name}» is a catalog antenna"))
             other = _antenna_named(session, clean)
             if other is not None and other.id != antenna_id:
-                raise ServiceError(f"Ya existe la antena «{clean}».")
+                raise ServiceError(_("The antenna «{name}» already exists.").format(name=clean))
             antenna.name = clean
+            antenna.brand = brand.strip()
             antenna.bands = list(bands)
             antenna.notes = notes.strip()
             session.flush()
@@ -361,12 +436,18 @@ class AntennaService:
         with session_scope() as session:
             antenna = session.get(Antenna, antenna_id)
             if antenna is None:
-                raise ServiceError("Antena no encontrada.")
+                raise ServiceError(_("Antenna not found."))
+            _refuse_preset(antenna, _("«{name}» is a catalog antenna"))
             # Past QSOs keep their contact, only the antenna reference goes.
             session.query(Qso).filter(Qso.antenna_id == antenna_id).update({"antenna_id": None})
             session.execute(
                 station_antenna_links.delete().where(
                     station_antenna_links.c.antenna_id == antenna_id
+                )
+            )
+            session.execute(
+                equipment_antenna_links.delete().where(
+                    equipment_antenna_links.c.antenna_id == antenna_id
                 )
             )
             session.delete(antenna)
@@ -385,17 +466,243 @@ class AntennaService:
                 continue
             band = bands.get(name)
             if band is None:
-                raise ServiceError(f"«{name}» no es una banda conocida (2m, 70cm, 20m...).")
+                raise ServiceError(
+                    _("«{name}» is not a known band (2m, 70cm, 20m...).").format(name=name)
+                )
             if band.name not in found:
                 found.append(band.name)
         order = [band.name for band in bands.BANDS]
         return sorted(found, key=order.index)
 
 
+class PowerSupplyService:
+    """Power supplies, registered on their own and grouped into sets."""
+
+    @staticmethod
+    def list_all() -> list[PowerSupply]:
+        with session_scope() as session:
+            return list(session.scalars(select(PowerSupply).order_by(PowerSupply.name)))
+
+    @staticmethod
+    def get(supply_id: int) -> PowerSupply | None:
+        with session_scope() as session:
+            return session.get(PowerSupply, supply_id)
+
+    @staticmethod
+    def create(
+        name: str,
+        voltage_v: float | None = None,
+        current_a: float | None = None,
+        notes: str = "",
+        brand: str = "",
+    ) -> PowerSupply:
+        clean = _supply_name(name)
+        _check_supply_values(voltage_v, current_a)
+        with session_scope() as session:
+            if _supply_named(session, clean) is not None:
+                raise ServiceError(
+                    _("The power supply «{name}» already exists.").format(name=clean)
+                )
+            supply = PowerSupply(
+                name=clean,
+                brand=brand.strip(),
+                voltage_v=voltage_v,
+                current_a=current_a,
+                notes=notes.strip(),
+            )
+            supply.code = next_code(session, PowerSupply)
+            session.add(supply)
+            session.flush()
+            return supply
+
+    @staticmethod
+    def update(
+        supply_id: int,
+        name: str,
+        voltage_v: float | None = None,
+        current_a: float | None = None,
+        notes: str = "",
+        brand: str = "",
+    ) -> PowerSupply:
+        clean = _supply_name(name)
+        _check_supply_values(voltage_v, current_a)
+        with session_scope() as session:
+            supply = session.get(PowerSupply, supply_id)
+            if supply is None:
+                raise ServiceError(_("Power supply not found."))
+            _refuse_preset(supply, _("«{name}» is a catalog power supply"))
+            other = _supply_named(session, clean)
+            if other is not None and other.id != supply_id:
+                raise ServiceError(
+                    _("The power supply «{name}» already exists.").format(name=clean)
+                )
+            supply.name = clean
+            supply.brand = brand.strip()
+            supply.voltage_v = voltage_v
+            supply.current_a = current_a
+            supply.notes = notes.strip()
+            session.flush()
+            return supply
+
+    @staticmethod
+    def delete(supply_id: int) -> None:
+        with session_scope() as session:
+            supply = session.get(PowerSupply, supply_id)
+            if supply is None:
+                raise ServiceError(_("Power supply not found."))
+            _refuse_preset(supply, _("«{name}» is a catalog power supply"))
+            session.execute(
+                equipment_supply_links.delete().where(
+                    equipment_supply_links.c.supply_id == supply_id
+                )
+            )
+            session.delete(supply)
+
+
+def _supply_name(name: str) -> str:
+    clean = name.strip()
+    if not clean:
+        raise ServiceError(_("The power supply name cannot be empty."))
+    return clean
+
+
+def _check_supply_values(voltage_v: float | None, current_a: float | None) -> None:
+    if voltage_v is not None and voltage_v <= 0:
+        raise ServiceError(_("The voltage must be positive."))
+    if current_a is not None and current_a <= 0:
+        raise ServiceError(_("The current must be positive."))
+
+
+def _supply_named(session: Any, name: str) -> PowerSupply | None:
+    return session.scalars(
+        select(PowerSupply).where(func.lower(PowerSupply.name) == name.lower())
+    ).first()
+
+
+class EquipmentService:
+    """Equipment sets: at least one radio, plus antennas and power supplies."""
+
+    @staticmethod
+    def _query():  # type: ignore[no-untyped-def]
+        return select(Equipment).options(
+            selectinload(Equipment.stations),
+            selectinload(Equipment.antennas),
+            selectinload(Equipment.supplies),
+        )
+
+    @staticmethod
+    def list_all() -> list[Equipment]:
+        with session_scope() as session:
+            return list(
+                session.scalars(EquipmentService._query().order_by(Equipment.name))
+            )
+
+    @staticmethod
+    def get(equipment_id: int) -> Equipment | None:
+        with session_scope() as session:
+            return session.scalars(
+                EquipmentService._query().where(Equipment.id == equipment_id)
+            ).first()
+
+    @staticmethod
+    def create(
+        name: str,
+        station_ids: list[int],
+        antenna_ids: list[int] | None = None,
+        supply_ids: list[int] | None = None,
+        notes: str = "",
+    ) -> Equipment:
+        clean = _equipment_name(name)
+        with session_scope() as session:
+            if _equipment_named(session, clean) is not None:
+                raise ServiceError(_("The set «{name}» already exists.").format(name=clean))
+            equipment = Equipment(name=clean, notes=notes.strip())
+            _fill_equipment(session, equipment, station_ids, antenna_ids, supply_ids)
+            session.add(equipment)
+            session.flush()
+            return equipment
+
+    @staticmethod
+    def update(
+        equipment_id: int,
+        name: str,
+        station_ids: list[int],
+        antenna_ids: list[int] | None = None,
+        supply_ids: list[int] | None = None,
+        notes: str = "",
+    ) -> Equipment:
+        clean = _equipment_name(name)
+        with session_scope() as session:
+            equipment = session.get(Equipment, equipment_id)
+            if equipment is None:
+                raise ServiceError(_("Equipment set not found."))
+            other = _equipment_named(session, clean)
+            if other is not None and other.id != equipment_id:
+                raise ServiceError(_("The set «{name}» already exists.").format(name=clean))
+            equipment.name = clean
+            equipment.notes = notes.strip()
+            _fill_equipment(session, equipment, station_ids, antenna_ids, supply_ids)
+            session.flush()
+            return equipment
+
+    @staticmethod
+    def delete(equipment_id: int) -> None:
+        """Remove the set; its radios, antennas and supplies stay."""
+        with session_scope() as session:
+            equipment = session.get(Equipment, equipment_id)
+            if equipment is None:
+                raise ServiceError(_("Equipment set not found."))
+            session.delete(equipment)
+
+
+def _equipment_name(name: str) -> str:
+    clean = name.strip()
+    if not clean:
+        raise ServiceError(_("The set name cannot be empty."))
+    return clean
+
+
+def _equipment_named(session: Any, name: str) -> Equipment | None:
+    return session.scalars(
+        select(Equipment).where(func.lower(Equipment.name) == name.lower())
+    ).first()
+
+
+def _fill_equipment(
+    session: Any,
+    equipment: Equipment,
+    station_ids: list[int],
+    antenna_ids: list[int] | None,
+    supply_ids: list[int] | None,
+) -> None:
+    """Replace what a set is made of, checking that every part exists."""
+    if not station_ids:
+        raise ServiceError(_("A set needs at least one radio."))
+    equipment.stations = _load_all(
+        session, Station, station_ids, _("One of the radios no longer exists.")
+    )
+    equipment.antennas = _load_all(
+        session, Antenna, antenna_ids or [], _("One of the antennas no longer exists.")
+    )
+    equipment.supplies = _load_all(
+        session, PowerSupply, supply_ids or [], _("One of the power supplies no longer exists.")
+    )
+
+
+def _load_all(session: Any, model: Any, ids: list[int], missing: str) -> list[Any]:
+    """Load every row of ``ids``; ``missing`` is the error when one is gone."""
+    if not ids:
+        return []
+    found = list(session.scalars(select(model).where(model.id.in_(ids))))
+    if len(found) != len(set(ids)):
+        raise ServiceError(missing)
+    return found
+
+
 def _antenna_name(name: str) -> str:
     clean = name.strip()
     if not clean:
-        raise ServiceError("El nombre de la antena no puede estar vacío.")
+        raise ServiceError(_("The antenna name cannot be empty."))
     return clean
 
 
@@ -408,11 +715,13 @@ def _antenna_named(session: Any, name: str) -> Antenna | None:
 def _validate_type(name: str, min_hz: int | None, max_hz: int | None) -> tuple[str, int, int]:
     clean = name.strip()
     if not clean:
-        raise ServiceError("El nombre del tipo no puede estar vacío.")
+        raise ServiceError(_("The type name cannot be empty."))
     if min_hz is None or max_hz is None:
-        raise ServiceError("Hacen falta la frecuencia mínima y la máxima.")
+        raise ServiceError(_("Both the minimum and the maximum frequency are needed."))
     if min_hz <= 0 or min_hz >= max_hz:
-        raise ServiceError("La frecuencia mínima debe ser positiva y menor que la máxima.")
+        raise ServiceError(
+            _("The minimum frequency must be positive and lower than the maximum.")
+        )
     return clean, min_hz, max_hz
 
 
@@ -478,9 +787,9 @@ class RepeaterService:
         """
         normalized = callsign_module.normalize(callsign_text)
         if not normalized:
-            raise ServiceError("El indicativo del repetidor no puede estar vacío.")
+            raise ServiceError(_("The repeater callsign cannot be empty."))
         if not output_hz:
-            raise ServiceError("Falta la frecuencia de salida del repetidor.")
+            raise ServiceError(_("The repeater output frequency is missing."))
 
         band = bands.from_frequency(output_hz)
         band_name = band.name if band else ""
@@ -489,7 +798,9 @@ class RepeaterService:
 
         with session_scope() as session:
             if session.scalars(select(Repeater).where(Repeater.callsign == normalized)).first():
-                raise ServiceError(f"El repetidor {normalized} ya existe.")
+                raise ServiceError(
+                    _("Repeater {call} already exists.").format(call=normalized)
+                )
             repeater = Repeater(
                 callsign=normalized,
                 name=name.strip(),
@@ -516,7 +827,7 @@ class RepeaterService:
         with session_scope() as session:
             repeater = session.get(Repeater, repeater_id)
             if repeater is None:
-                raise ServiceError("Repetidor no encontrado.")
+                raise ServiceError(_("Repeater not found."))
 
             if "callsign" in changes:
                 changes["callsign"] = callsign_module.normalize(str(changes["callsign"]))
@@ -547,7 +858,7 @@ class RepeaterService:
         with session_scope() as session:
             repeater = session.get(Repeater, repeater_id)
             if repeater is None:
-                raise ServiceError("Repetidor no encontrado.")
+                raise ServiceError(_("Repeater not found."))
             session.query(Qso).filter(Qso.repeater_id == repeater_id).update(
                 {"repeater_id": None}
             )
@@ -561,7 +872,7 @@ class RepeaterService:
         """Put the session on a repeater, adopting all of its settings."""
         repeater = RepeaterService.get(repeater_id)
         if repeater is None:
-            raise ServiceError("Repetidor no encontrado.")
+            raise ServiceError(_("Repeater not found."))
         state.set_repeater(
             repeater.id,
             repeater.callsign,
@@ -664,19 +975,22 @@ class ProfileService:
         """
         clean = name.strip()
         if not clean:
-            raise ServiceError("El nombre de la configuración no puede estar vacío.")
+            raise ServiceError(_("The configuration name cannot be empty."))
         with session_scope() as session:
             profile = session.scalars(select(Profile).where(Profile.name == clean)).first()
             if profile is not None and not overwrite:
-                raise ServiceError(f"Ya existe la configuración «{clean}».")
+                raise ServiceError(
+                    _("The configuration «{name}» already exists.").format(name=clean)
+                )
             station = _station_for_assignment(session, station_id) if station_id else None
             if station is not None:
                 _check_covers(station, clean, state.freq_hz)
             antenna = session.get(Antenna, antenna_id) if antenna_id else None
             if antenna is not None and not antenna.covers_band(state.band):
                 raise ServiceError(
-                    f"La antena «{antenna.name}» no trabaja en {state.band} "
-                    f"({antenna.band_names})."
+                    _("The antenna «{antenna}» does not work on {band} ({bands}).").format(
+                        antenna=antenna.name, band=state.band, bands=antenna.band_names
+                    )
                 )
             if profile is None:
                 profile = Profile(name=clean)
@@ -698,14 +1012,16 @@ class ProfileService:
     def rename(profile_id: int, name: str) -> Profile:
         clean = name.strip()
         if not clean:
-            raise ServiceError("El nombre de la configuración no puede estar vacío.")
+            raise ServiceError(_("The configuration name cannot be empty."))
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Configuración no encontrada.")
+                raise ServiceError(_("Configuration not found."))
             other = session.scalars(select(Profile).where(Profile.name == clean)).first()
             if other is not None and other.id != profile_id:
-                raise ServiceError(f"Ya existe la configuración «{clean}».")
+                raise ServiceError(
+                    _("The configuration «{name}» already exists.").format(name=clean)
+                )
             profile.name = clean
             session.flush()
             return profile
@@ -721,7 +1037,7 @@ class ProfileService:
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Configuración no encontrada.")
+                raise ServiceError(_("Configuration not found."))
             station = _station_for_assignment(session, station_id)
             _check_covers(station, profile.name, profile.freq_hz)
             if station not in profile.stations:
@@ -754,7 +1070,7 @@ class ProfileService:
         """
         profile = ProfileService.get(profile_id)
         if profile is None:
-            raise ServiceError("Configuración no encontrada.")
+            raise ServiceError(_("Configuration not found."))
         state.operator_id = profile.operator_id or state.operator_id
         if station_id is not None:
             state.station_id = station_id
@@ -783,7 +1099,7 @@ class ProfileService:
             session.query(Profile).update({"is_default": False})
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Configuración no encontrada.")
+                raise ServiceError(_("Configuration not found."))
             profile.is_default = True
 
     @staticmethod
@@ -791,7 +1107,7 @@ class ProfileService:
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError("Configuración no encontrada.")
+                raise ServiceError(_("Configuration not found."))
             session.delete(profile)
 
 
@@ -800,15 +1116,21 @@ def _station_for_assignment(session: Any, station_id: int) -> Station:
         select(Station).options(selectinload(Station.types)).where(Station.id == station_id)
     ).first()
     if station is None:
-        raise ServiceError("Equipo no encontrado.")
+        raise ServiceError(_("Rig not found."))
     return station
 
 
 def _check_covers(station: Station, profile_name: str, freq_hz: int | None) -> None:
     if not station.covers(freq_hz):
         raise ServiceError(
-            f"«{profile_name}» ({bands.format_frequency(freq_hz)}) queda fuera de los "
-            f"tipos de «{station.name}» ({station.type_names})."
+            _(
+                "«{profile}» ({frequency}) is outside the types of «{radio}» ({types})."
+            ).format(
+                profile=profile_name,
+                frequency=bands.format_frequency(freq_hz),
+                radio=station.name,
+                types=station.type_names,
+            )
         )
 
 
@@ -916,7 +1238,7 @@ def _remember_in_address_book(row: QsoRow) -> None:
     base = callsign_module.base_call(row.call)
     if not base:
         return
-    first_name, _, last_name = row.name.partition(" ")
+    first_name, _sep, last_name = row.name.partition(" ")
     try:
         known = ContactService.lookup(base)
         if known is not None:
@@ -963,11 +1285,11 @@ class QsoService:
             The stored contact as a QsoRow.
         """
         if state.operator_id is None:
-            raise ServiceError("No hay operador seleccionado.")
+            raise ServiceError(_("No operator is selected."))
 
         call_raw = str(fields.get("call", "")).strip()
         if not call_raw:
-            raise ServiceError("Falta el indicativo.")
+            raise ServiceError(_("The callsign is missing."))
 
         entry_mode = EntryMode.MANUAL if qso_utc is not None else EntryMode.AUTO
         timestamp = qso_utc or dt.datetime.now(dt.timezone.utc).replace(
@@ -1120,7 +1442,7 @@ class QsoService:
         with session_scope() as session:
             qso = session.get(Qso, qso_id)
             if qso is None:
-                raise ServiceError("QSO no encontrado.")
+                raise ServiceError(_("QSO not found."))
             return MANUAL_EDITABLE_FIELDS if qso.is_manual else AUTO_EDITABLE_FIELDS
 
     @staticmethod
@@ -1134,14 +1456,16 @@ class QsoService:
         with session_scope() as session:
             qso = session.get(Qso, qso_id)
             if qso is None:
-                raise ServiceError("QSO no encontrado.")
+                raise ServiceError(_("QSO not found."))
 
             allowed = MANUAL_EDITABLE_FIELDS if qso.is_manual else AUTO_EDITABLE_FIELDS
             rejected = sorted(set(changes) - allowed)
             if rejected:
                 raise ServiceError(
-                    "Este QSO es automático: la fecha y la hora no se pueden modificar. "
-                    f"Campos rechazados: {', '.join(rejected)}."
+                    _(
+                        "This QSO is automatic: its date and time cannot be changed. "
+                        "Rejected fields: {fields}."
+                    ).format(fields=", ".join(rejected))
                 )
 
             for key, value in changes.items():
@@ -1176,7 +1500,7 @@ class QsoService:
         with session_scope() as session:
             qso = session.get(Qso, qso_id)
             if qso is None:
-                raise ServiceError("QSO no encontrado.")
+                raise ServiceError(_("QSO not found."))
             session.delete(qso)
 
     @staticmethod
@@ -1384,17 +1708,23 @@ class ContactService:
     ) -> ContactRow:
         normalized = callsign_module.normalize(call)
         if not normalized:
-            raise ServiceError("El indicativo no puede estar vacío.")
+            raise ServiceError(_("The callsign cannot be empty."))
         with session_scope() as session:
             base = callsign_module.base_call(normalized)
             if session.scalars(select(Contact).where(Contact.base_call == base)).first():
-                raise ServiceError(f"{base} ya está en la agenda.")
+                raise ServiceError(
+                    _("{call} is already in the address book.").format(call=base)
+                )
             if dmr_id is not None:
                 clash = session.scalars(
                     select(Contact).where(Contact.dmr_id == dmr_id)
                 ).first()
                 if clash is not None:
-                    raise ServiceError(f"El ID DMR {dmr_id} ya es de {clash.callsign}.")
+                    raise ServiceError(
+                        _("DMR ID {dmr_id} already belongs to {call}.").format(
+                            dmr_id=dmr_id, call=clash.callsign
+                        )
+                    )
             contact = Contact(
                 callsign=normalized,
                 base_call=base,
@@ -1418,7 +1748,7 @@ class ContactService:
         with session_scope() as session:
             contact = session.get(Contact, contact_id)
             if contact is None:
-                raise ServiceError("Contacto no encontrado en la agenda.")
+                raise ServiceError(_("Contact not found in the address book."))
             if "callsign" in changes:
                 contact.callsign = callsign_module.normalize(str(changes.pop("callsign")))
                 contact.base_call = callsign_module.base_call(contact.callsign)
@@ -1433,7 +1763,7 @@ class ContactService:
         with session_scope() as session:
             contact = session.get(Contact, contact_id)
             if contact is None:
-                raise ServiceError("Contacto no encontrado en la agenda.")
+                raise ServiceError(_("Contact not found in the address book."))
             session.delete(contact)
 
     @staticmethod

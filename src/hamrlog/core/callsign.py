@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import re
 
+from ..i18n import N_, _
+
 #: Structure of a callsign: a prefix of up to three alphanumerics, the digit
 #: that separates prefix from suffix, and a suffix of up to four characters
 #: ending in a letter. This admits the shapes that actually exist — EA7WM,
@@ -26,61 +28,72 @@ _COMMON_SUFFIXES = {"P", "M", "MM", "AM", "QRP", "A", "B", "R"}
 #: the genuinely unusual call that no reasonable pattern covers.
 OVERRIDE_MARKER = "!"
 
-# Prefix -> (entity name, ISO-ish DXCC label). Longest prefix wins.
+# Prefix -> DXCC entity name, in English as stored and exported to ADIF.
+# The names are marked with N_() so the interface can show them translated
+# with _(). Longest prefix wins.
 _PREFIXES: dict[str, str] = {
-    "EA": "España", "EB": "España", "EC": "España", "ED": "España",
-    "EE": "España", "EF": "España", "EG": "España", "EH": "España",
-    "AM": "España", "AN": "España", "AO": "España",
-    "CT": "Portugal", "CR": "Portugal", "CS": "Portugal", "CQ": "Portugal",
-    "F": "Francia", "TM": "Francia", "TK": "Córcega",
-    "I": "Italia", "IZ": "Italia", "IK": "Italia", "IW": "Italia",
-    "DL": "Alemania", "DK": "Alemania", "DJ": "Alemania", "DB": "Alemania",
-    "DD": "Alemania", "DF": "Alemania", "DG": "Alemania", "DH": "Alemania",
-    "DO": "Alemania", "DM": "Alemania", "DA": "Alemania",
-    "G": "Inglaterra", "M": "Inglaterra", "2E": "Inglaterra",
-    "GM": "Escocia", "MM": "Escocia", "GW": "Gales", "MW": "Gales",
-    "GI": "Irlanda del Norte", "GD": "Isla de Man", "GJ": "Jersey", "GU": "Guernsey",
-    "EI": "Irlanda", "EJ": "Irlanda",
-    "ON": "Bélgica", "OO": "Bélgica", "PA": "Países Bajos", "PD": "Países Bajos",
-    "PE": "Países Bajos", "PI": "Países Bajos",
-    "LX": "Luxemburgo", "HB": "Suiza", "HB0": "Liechtenstein", "OE": "Austria",
-    "SP": "Polonia", "SQ": "Polonia", "OK": "Chequia", "OL": "Chequia",
-    "OM": "Eslovaquia", "HA": "Hungría", "HG": "Hungría",
-    "S5": "Eslovenia", "9A": "Croacia", "E7": "Bosnia-Herzegovina",
-    "YU": "Serbia", "YT": "Serbia", "Z3": "Macedonia del Norte", "ZA": "Albania",
-    "SV": "Grecia", "SY": "Grecia", "SZ": "Grecia", "5B": "Chipre", "C4": "Chipre",
-    "TA": "Turquía", "YM": "Turquía", "LZ": "Bulgaria", "YO": "Rumanía", "YR": "Rumanía",
-    "ER": "Moldavia", "UR": "Ucrania", "UT": "Ucrania", "UY": "Ucrania", "US": "Ucrania",
-    "EU": "Bielorrusia", "EV": "Bielorrusia", "EW": "Bielorrusia",
-    "R": "Rusia", "UA": "Rusia", "RA": "Rusia", "RK": "Rusia", "RV": "Rusia",
-    "LY": "Lituania", "YL": "Letonia", "ES": "Estonia",
-    "OH": "Finlandia", "OH0": "Islas Aland", "OF": "Finlandia",
-    "SM": "Suecia", "SA": "Suecia", "SK": "Suecia", "8S": "Suecia",
-    "LA": "Noruega", "LB": "Noruega", "LN": "Noruega", "JW": "Svalbard",
-    "OZ": "Dinamarca", "OU": "Dinamarca", "OY": "Islas Feroe", "OX": "Groenlandia",
-    "TF": "Islandia",
-    "9H": "Malta", "1A": "S.M.O.M.", "HV": "Vaticano", "T7": "San Marino",
-    "3A": "Mónaco", "C3": "Andorra", "ZB": "Gibraltar",
-    "CN": "Marruecos", "7X": "Argelia", "3V": "Túnez", "5A": "Libia", "SU": "Egipto",
-    "EA8": "Islas Canarias", "EA9": "Ceuta y Melilla", "EA6": "Islas Baleares",
-    "CT3": "Madeira", "CU": "Azores",
-    "K": "Estados Unidos", "W": "Estados Unidos", "N": "Estados Unidos",
-    "AA": "Estados Unidos", "AB": "Estados Unidos", "AC": "Estados Unidos",
-    "KH6": "Hawái", "KL7": "Alaska", "KP4": "Puerto Rico",
-    "VE": "Canadá", "VA": "Canadá", "VO": "Canadá", "VY": "Canadá",
-    "XE": "México", "LU": "Argentina", "PY": "Brasil", "PP": "Brasil", "PU": "Brasil",
-    "CE": "Chile", "CX": "Uruguay", "CP": "Bolivia", "OA": "Perú", "HK": "Colombia",
-    "YV": "Venezuela", "HC": "Ecuador", "ZP": "Paraguay",
-    "CO": "Cuba", "CM": "Cuba", "HI": "República Dominicana", "TI": "Costa Rica",
-    "JA": "Japón", "JH": "Japón", "JR": "Japón", "JE": "Japón", "JF": "Japón",
-    "BY": "China", "BG": "China", "BH": "China", "BD": "China",
-    "HL": "Corea del Sur", "DS": "Corea del Sur", "BV": "Taiwán",
-    "VK": "Australia", "ZL": "Nueva Zelanda", "YB": "Indonesia", "DU": "Filipinas",
-    "9M": "Malasia", "HS": "Tailandia", "9V": "Singapur", "VU": "India",
-    "4X": "Israel", "4Z": "Israel", "A4": "Omán", "A6": "Emiratos Árabes Unidos",
-    "A7": "Catar", "A9": "Baréin", "HZ": "Arabia Saudí", "9K": "Kuwait",
-    "ZS": "Sudáfrica", "5Z": "Kenia", "5H": "Tanzania", "TR": "Gabón",
-    "D2": "Angola", "C9": "Mozambique", "3B8": "Mauricio", "FR": "Reunión",
+    "EA": N_("Spain"), "EB": N_("Spain"), "EC": N_("Spain"), "ED": N_("Spain"),
+    "EE": N_("Spain"), "EF": N_("Spain"), "EG": N_("Spain"), "EH": N_("Spain"),
+    "AM": N_("Spain"), "AN": N_("Spain"), "AO": N_("Spain"),
+    "CT": N_("Portugal"), "CR": N_("Portugal"), "CS": N_("Portugal"), "CQ": N_("Portugal"),
+    "F": N_("France"), "TM": N_("France"), "TK": N_("Corsica"),
+    "I": N_("Italy"), "IZ": N_("Italy"), "IK": N_("Italy"), "IW": N_("Italy"),
+    "DL": N_("Germany"), "DK": N_("Germany"), "DJ": N_("Germany"), "DB": N_("Germany"),
+    "DD": N_("Germany"), "DF": N_("Germany"), "DG": N_("Germany"), "DH": N_("Germany"),
+    "DO": N_("Germany"), "DM": N_("Germany"), "DA": N_("Germany"),
+    "G": N_("England"), "M": N_("England"), "2E": N_("England"),
+    "GM": N_("Scotland"), "MM": N_("Scotland"), "GW": N_("Wales"), "MW": N_("Wales"),
+    "GI": N_("Northern Ireland"), "GD": N_("Isle of Man"), "GJ": N_("Jersey"), "GU": N_("Guernsey"),
+    "EI": N_("Ireland"), "EJ": N_("Ireland"),
+    "ON": N_("Belgium"), "OO": N_("Belgium"), "PA": N_("Netherlands"), "PD": N_("Netherlands"),
+    "PE": N_("Netherlands"), "PI": N_("Netherlands"),
+    "LX": N_("Luxembourg"), "HB": N_("Switzerland"), "HB0": N_("Liechtenstein"),
+    "OE": N_("Austria"),
+    "SP": N_("Poland"), "SQ": N_("Poland"), "OK": N_("Czech Republic"), "OL": N_("Czech Republic"),
+    "OM": N_("Slovak Republic"), "HA": N_("Hungary"), "HG": N_("Hungary"),
+    "S5": N_("Slovenia"), "9A": N_("Croatia"), "E7": N_("Bosnia-Herzegovina"),
+    "YU": N_("Serbia"), "YT": N_("Serbia"), "Z3": N_("North Macedonia"), "ZA": N_("Albania"),
+    "SV": N_("Greece"), "SY": N_("Greece"), "SZ": N_("Greece"), "5B": N_("Cyprus"),
+    "C4": N_("Cyprus"),
+    "TA": N_("Turkey"), "YM": N_("Turkey"), "LZ": N_("Bulgaria"), "YO": N_("Romania"),
+    "YR": N_("Romania"),
+    "ER": N_("Moldova"), "UR": N_("Ukraine"), "UT": N_("Ukraine"), "UY": N_("Ukraine"),
+    "US": N_("Ukraine"),
+    "EU": N_("Belarus"), "EV": N_("Belarus"), "EW": N_("Belarus"),
+    "R": N_("Russia"), "UA": N_("Russia"), "RA": N_("Russia"), "RK": N_("Russia"),
+    "RV": N_("Russia"),
+    "LY": N_("Lithuania"), "YL": N_("Latvia"), "ES": N_("Estonia"),
+    "OH": N_("Finland"), "OH0": N_("Aland Islands"), "OF": N_("Finland"),
+    "SM": N_("Sweden"), "SA": N_("Sweden"), "SK": N_("Sweden"), "8S": N_("Sweden"),
+    "LA": N_("Norway"), "LB": N_("Norway"), "LN": N_("Norway"), "JW": N_("Svalbard"),
+    "OZ": N_("Denmark"), "OU": N_("Denmark"), "OY": N_("Faroe Islands"), "OX": N_("Greenland"),
+    "TF": N_("Iceland"),
+    "9H": N_("Malta"), "1A": N_("Sovereign Military Order of Malta"), "HV": N_("Vatican City"),
+    "T7": N_("San Marino"),
+    "3A": N_("Monaco"), "C3": N_("Andorra"), "ZB": N_("Gibraltar"),
+    "CN": N_("Morocco"), "7X": N_("Algeria"), "3V": N_("Tunisia"), "5A": N_("Libya"),
+    "SU": N_("Egypt"),
+    "EA8": N_("Canary Islands"), "EA9": N_("Ceuta & Melilla"), "EA6": N_("Balearic Islands"),
+    "CT3": N_("Madeira Islands"), "CU": N_("Azores"),
+    "K": N_("United States"), "W": N_("United States"), "N": N_("United States"),
+    "AA": N_("United States"), "AB": N_("United States"), "AC": N_("United States"),
+    "KH6": N_("Hawaii"), "KL7": N_("Alaska"), "KP4": N_("Puerto Rico"),
+    "VE": N_("Canada"), "VA": N_("Canada"), "VO": N_("Canada"), "VY": N_("Canada"),
+    "XE": N_("Mexico"), "LU": N_("Argentina"), "PY": N_("Brazil"), "PP": N_("Brazil"),
+    "PU": N_("Brazil"),
+    "CE": N_("Chile"), "CX": N_("Uruguay"), "CP": N_("Bolivia"), "OA": N_("Peru"),
+    "HK": N_("Colombia"),
+    "YV": N_("Venezuela"), "HC": N_("Ecuador"), "ZP": N_("Paraguay"),
+    "CO": N_("Cuba"), "CM": N_("Cuba"), "HI": N_("Dominican Republic"), "TI": N_("Costa Rica"),
+    "JA": N_("Japan"), "JH": N_("Japan"), "JR": N_("Japan"), "JE": N_("Japan"), "JF": N_("Japan"),
+    "BY": N_("China"), "BG": N_("China"), "BH": N_("China"), "BD": N_("China"),
+    "HL": N_("South Korea"), "DS": N_("South Korea"), "BV": N_("Taiwan"),
+    "VK": N_("Australia"), "ZL": N_("New Zealand"), "YB": N_("Indonesia"), "DU": N_("Philippines"),
+    "9M": N_("Malaysia"), "HS": N_("Thailand"), "9V": N_("Singapore"), "VU": N_("India"),
+    "4X": N_("Israel"), "4Z": N_("Israel"), "A4": N_("Oman"), "A6": N_("United Arab Emirates"),
+    "A7": N_("Qatar"), "A9": N_("Bahrain"), "HZ": N_("Saudi Arabia"), "9K": N_("Kuwait"),
+    "ZS": N_("South Africa"), "5Z": N_("Kenya"), "5H": N_("Tanzania"), "TR": N_("Gabon"),
+    "D2": N_("Angola"), "C9": N_("Mozambique"), "3B8": N_("Mauritius"), "FR": N_("Reunion Island"),
 }
 
 # Longest prefixes first so EA8 beats EA and KH6 beats K.
@@ -130,33 +143,33 @@ def validate(raw: str) -> str | None:
     """
     call = normalize(raw)
     if not call:
-        return "Falta el indicativo."
+        return _("The callsign is missing.")
     if not _ALLOWED_RE.match(call):
         invalid = sorted({c for c in call if not c.isalnum() and c != "/"})
-        return (
-            f"«{call}» contiene caracteres no permitidos ({' '.join(invalid)}). "
-            "Un indicativo solo lleva letras, números y la barra de portable."
-        )
+        return _(
+            "«{call}» contains characters that are not allowed ({chars}). "
+            "A callsign only has letters, digits and the portable slash."
+        ).format(call=call, chars=" ".join(invalid))
 
     base = base_call(call)
     if not base:
-        return f"«{call}» no contiene ningún indicativo."
+        return _("«{call}» does not contain any callsign.").format(call=call)
     if len(base) < 3:
-        return f"«{base}» es demasiado corto para ser un indicativo."
+        return _("«{call}» is too short to be a callsign.").format(call=base)
     if len(base) > 8:
-        return f"«{base}» es demasiado largo para ser un indicativo."
+        return _("«{call}» is too long to be a callsign.").format(call=base)
     if not any(character.isdigit() for character in base):
-        return (
-            f"«{base}» no lleva ningún número. Todo indicativo tiene un dígito "
-            "que separa el prefijo del sufijo, como en EA7WM."
-        )
+        return _(
+            "«{call}» has no digit. Every callsign has a digit that separates "
+            "the prefix from the suffix, as in EA7WM."
+        ).format(call=base)
     if CALLSIGN_RE.match(base):
         return None
-    return (
-        f"«{base}» no tiene forma de indicativo. Se espera prefijo, dígito y "
-        f"sufijo, como EA7WM o 9A1AA. Añade «{OVERRIDE_MARKER}» al final para "
-        "registrarlo de todos modos."
-    )
+    return _(
+        "«{call}» does not look like a callsign. Expected a prefix, a digit and "
+        "a suffix, such as EA7WM or 9A1AA. Add «{marker}» at the end to log it "
+        "anyway."
+    ).format(call=base, marker=OVERRIDE_MARKER)
 
 
 def strip_override(raw: str) -> tuple[str, bool]:

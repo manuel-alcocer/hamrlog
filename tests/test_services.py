@@ -31,7 +31,7 @@ def test_logging_uses_the_session_defaults(state):
     assert row.band == "40m"
     assert row.freq_hz == 7_130_000
     assert row.mode == "SSB"
-    assert row.country == "España"
+    assert row.country == "Spain"
     assert row.entry_mode == "AUTO"
     assert row.station_name == "HF-Casa"
 
@@ -84,8 +84,8 @@ def test_manual_contact_allows_every_field(state):
 
 def test_changing_the_callsign_recomputes_the_country(state):
     row = log_line("ea4abc", state, qso_utc=dt.datetime(2026, 1, 15, 12, 30))
-    assert row.country == "España"
-    assert QsoService.update(row.id, {"call": "DL2JKL"}).country == "Alemania"
+    assert row.country == "Spain"
+    assert QsoService.update(row.id, {"call": "DL2JKL"}).country == "Germany"
 
 
 def test_duplicates_are_scoped_to_band_and_mode(state):

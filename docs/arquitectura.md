@@ -25,6 +25,9 @@ hamrlog/
 │   ├── migrations.py   Añade columnas y tablas que falten al abrir
 │   └── session.py      Motor, sesiones y esquema
 ├── adif/           Lectura y escritura del formato ADIF 3.1
+├── i18n.py         Traducciones: _() y lectura de los .po
+├── locales/es/     Traducciones al español, un .po por área
+├── data/preseed/   Catálogo de emisoras, antenas y fuentes (JSON, en español)
 ├── tui/            Interfaz Textual: una sola pantalla
 │   ├── screens/        base.py = los dos diálogos (confirmación y formulario)
 │   └── widgets/        detail.py = detalle de lo señalado en el histórico
@@ -123,6 +126,38 @@ se contradijeran. Mientras dura, las flechas no mueven el
 cursor: el formulario pertenece a esa fila. La tabla se redibuja celda a celda
 (`HistoryPanel.replace_row`) para no perder la posición.
 
+**El Inventario reutiliza el registro en vez de imitarlo.** `F2` no abre otra
+pantalla: oculta el histórico, muestra `InventoryView` en el mismo marco y
+reconstruye la línea de entrada con las casillas de la pestaña. Cada pestaña es
+una `Kind` (`tui/inventory.py`) que declara columnas, casillas y cómo se
+guardan; la navegación, la fila `<Nuevo …>`, la barra de acciones y la edición
+son las del registro. Lo escrito a medias se guarda por vista y pestaña.
+
+**Dos identificadores.** Cada emisora, antena y fuente tiene su `id`
+autoincremental, que es el que usan las claves ajenas, y su `code` (`E0001`,
+`A0001`, `S0001`), que es el que lee y escribe el operador. El código tiene
+índice único y lo asigna `db/codes.py` al crear la fila; al arrancar, además,
+`assign_missing_codes` da código a cualquier fila que no lo tenga (bases
+antiguas, catálogo) y crea el índice si falta.
+
+**Las teclas de función son de cada vista.** Todas pasan por
+`action_function_key`, que decide según la vista; una tecla sin uso no hace
+nada en vez de llegar a la línea de entrada, y sobre un diálogo se cede a él
+con `SkipAction`. `F1` es siempre el registro.
+
+**El catálogo vive en la base de datos, marcado.** Los elementos de
+`data/preseed` se insertan como filas con `preset = True` y son los servicios
+los que se niegan a modificarlas o borrarlas, de modo que la regla vale igual
+para la interfaz y para una API. La carga es idempotente (por nombre, sin
+distinguir mayúsculas) y lee cualquier fichero de la carpeta, que declara su
+`tipo`. Esos ficheros son lo único escrito en español.
+
+**Inglés en el código, traducciones aparte.** Los textos de origen están en
+inglés dentro de `_()`; `N_()` marca los de tablas construidas al importar,
+que se traducen al mostrarse. Los `.po` se leen directamente, sin compilar a
+`.mo`: son pocos y así no hay ficheros generados que mantener. Una prueba
+falla si algún texto marcado no tiene traducción.
+
 **La agenda no tiene claves ajenas al log.** Un listín de usuarios DMR son
 decenas de miles de filas que llegan de golpe y se reemplazan enteras; atarlas
 a los QSO obligaría a mantener esa relación en cada importación. El enlace se
@@ -194,7 +229,10 @@ datos; falta la de presentación.
 | Tabla | Contenido |
 |---|---|
 | `operators` | Operadores locales. Nunca se borran: sus contactos los referencian |
-| `stations` | Equipos (emisora, antena, potencia) |
+| `stations` | Emisoras (marca, modelo, potencia, tipos). `preset` marca las del catálogo |
+| `antennas` | Antenas con sus bandas y marca |
+| `power_supplies` | Fuentes de alimentación: tensión, corriente, marca |
+| `equipment` | Equipos: conjuntos de emisoras, antenas y fuentes |
 | `repeaters` | Repetidores: frecuencias, shift, CTCSS y datos digitales |
 | `contacts` | Agenda: quién es cada indicativo, con su ID DMR |
 | `profiles` | Configuraciones guardadas, incluido el formato de la entrada rápida |

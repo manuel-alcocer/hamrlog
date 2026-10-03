@@ -11,6 +11,8 @@ import datetime as dt
 from dataclasses import dataclass, field
 from typing import Any
 
+from ..i18n import _
+
 
 @dataclass(frozen=True, slots=True)
 class QsoRow:
@@ -92,9 +94,10 @@ class ImportSummary:
 
     @property
     def text(self) -> str:
-        return (
-            f"{self.created} nuevos, {self.updated} actualizados, "
-            f"{self.skipped} omitidos de {self.total} registros."
+        return _(
+            "{created} new, {updated} updated, {skipped} skipped of {total} records."
+        ).format(
+            created=self.created, updated=self.updated, skipped=self.skipped, total=self.total
         )
 
 

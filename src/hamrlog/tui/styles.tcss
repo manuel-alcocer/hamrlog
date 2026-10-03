@@ -44,6 +44,25 @@ Screen {
     background: $surface;
 }
 
+/* The Equipos view takes the log's place in the same frame. */
+#equipment {
+    height: 1fr;
+    min-height: 3;
+}
+
+#inventory-tabs {
+    height: 1;
+    padding: 0 1;
+    background: $panel;
+}
+
+#inventory-table {
+    height: 1fr;
+    border: none;
+    background: $surface;
+}
+
+#inventory-table > .datatable--header,
 #history > .datatable--header {
     background: $panel;
     color: $text;
@@ -52,6 +71,8 @@ Screen {
 
 /* The history never holds focus, so its cursor must stay clearly visible
    anyway: it is what the arrow keys move from the entry line. */
+#inventory-table > .datatable--cursor,
+#inventory-table > .datatable--hover,
 #history > .datatable--cursor,
 #history > .datatable--hover {
     background: $primary;

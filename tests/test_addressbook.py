@@ -286,7 +286,7 @@ def test_working_a_new_station_adds_it_to_the_book(state):
     assert entry.first_name == "Juan"
     assert entry.last_name == "Garcia"
     assert entry.city == "Madrid"
-    assert entry.country == "España"
+    assert entry.country == "Spain"
     assert entry.source == "log"
 
 
@@ -320,7 +320,7 @@ def test_a_callsign_without_a_name_still_gets_an_entry(state):
     entry = ContactService.lookup("DL2JKL")
     assert entry is not None
     assert entry.first_name == ""
-    assert entry.country == "Alemania"
+    assert entry.country == "Germany"
 
 
 def test_automatic_bookkeeping_can_be_switched_off(state):

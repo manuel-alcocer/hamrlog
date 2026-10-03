@@ -20,6 +20,10 @@ textual_datas, textual_binaries, textual_hidden = collect_all("textual")
 datas = textual_datas + [
     # The application stylesheet, read through importlib.resources.
     (str(SRC_DIR / "hamrlog" / "tui" / "styles.tcss"), "hamrlog/tui"),
+    # Translations (.po files), read at start through importlib.resources.
+    (str(SRC_DIR / "hamrlog" / "locales"), "hamrlog/locales"),
+    # The equipment catalog loaded into the database at start.
+    (str(SRC_DIR / "hamrlog" / "data" / "preseed"), "hamrlog/data/preseed"),
 ]
 
 hiddenimports = (

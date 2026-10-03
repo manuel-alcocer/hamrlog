@@ -2,6 +2,41 @@
 
 ## Sin publicar
 
+### Inventario (`F2`)
+
+- `F2` convierte el recuadro del registro en el **Inventario**, con cuatro
+  pestañas: Equipos, Emisoras, Antenas y Fuentes. Funciona como el registro:
+  lista arriba, `<Nuevo …>` al final y la línea de entrada para escribir.
+  `F5` `F6` o `RePág` `AvPág` cambian de pestaña y `F1` vuelve al registro; lo
+  que estuvieras escribiendo en cada sitio se conserva.
+- Las teclas de función dependen de la ventana. `F1` es siempre el registro;
+  la que una ventana no usa no hace nada.
+- Un **equipo** es un conjunto de al menos una emisora, con antenas y fuentes.
+  Emisoras, antenas y fuentes se dan de alta sueltas y pueden estar en varios
+  equipos. Las casillas de un equipo completan los nombres con `→`.
+- Cada emisora, antena y fuente tiene un **ID propio** automático y único
+  (`E0001`, `A0001`, `S0001`), aparte del identificador interno. Los equipos
+  aceptan esos ID en lugar de los nombres.
+- Nuevas **fuentes de alimentación** (tensión y corriente) y **marca** en
+  emisoras, antenas y fuentes, con filtro: `/marca icom`, `Alt+↑` `Alt+↓`.
+- **Catálogo**: al abrir se cargan todos los ficheros de
+  `hamrlog/data/preseed/` con equipos a la venta en tiendas españolas, sin
+  duplicar. No se pueden modificar ni borrar; se usan al montar un equipo.
+- No se puede borrar la única emisora de un equipo.
+
+**Esquemas 6 a 8**: cada emisora existente se convierte en un equipo con su
+mismo nombre y sus antenas; los países guardados en español pasan a inglés; y
+las emisoras, antenas y fuentes que ya existían reciben su ID por orden de
+alta.
+
+### Inglés y español
+
+- Todo el código y los textos de origen pasan a inglés; el español es una
+  traducción en `hamrlog/locales/es/*.po`. El idioma sale del sistema y se
+  fuerza con `HAMRLOG_LANG=en|es`.
+- Los países se guardan con su nombre inglés, como los usa ADIF, y se
+  muestran traducidos.
+
 ### Solo la pantalla principal
 
 Las pantallas de menú se retiran para rediseñarlas; queda la vista principal.

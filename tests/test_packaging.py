@@ -36,3 +36,11 @@ def test_the_windows_installer_default_matches_the_version():
     found = re.search(r'#define HamrlogVersion "(.+)"', script)
     assert found is not None
     assert found.group(1) == hamrlog.__version__
+
+
+def test_the_windows_bundle_carries_translations_and_catalog():
+    """Both are read through importlib.resources, which PyInstaller only
+    serves for files it was told to bundle."""
+    spec = (PROJECT_ROOT / "packaging" / "pyinstaller" / "hamrlog.spec").read_text()
+    assert '"hamrlog/locales"' in spec
+    assert '"hamrlog/data/preseed"' in spec

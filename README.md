@@ -200,9 +200,61 @@ quién es.
 | `↑` `↓` | Recorren el histórico |
 | `Ctrl+D` | Borra el QSO señalado, o el último |
 | `Esc` | Vuelve a `<Insertar nuevo>` |
+| `F1` | **Registro**, desde cualquier ventana |
+| `F2` | **Inventario** |
+| `RePág` `AvPág` | Recorren el histórico de diez en diez |
 | `Ctrl+Q` | Salir |
 
-No hay menús. Lo que hereda cada QSO se cambia con comandos.
+Lo que hereda cada QSO se cambia con comandos.
+
+### Inventario (`F2`)
+
+`F2` convierte el recuadro del registro en el **Inventario**, con cuatro pestañas, y
+funciona igual que el registro: la lista arriba, la línea de entrada abajo
+para escribir, `↑` `↓` para recorrerla y `<Nuevo …>` al final.
+
+| Pestaña | Qué se da de alta | Casillas |
+|---|---|---|
+| **Equipos** | Un conjunto: al menos una emisora, con sus antenas y fuentes | nombre, emisoras, antenas, fuentes, notas |
+| **Emisoras** | Cada emisora suelta | marca, modelo, nombre, potencia, tipos (HF, VHF, UHF, CB), notas |
+| **Antenas** | Cada antena suelta | marca, nombre, bandas, notas |
+| **Fuentes** | Fuentes de alimentación y baterías | marca, nombre, tensión, corriente, notas |
+
+Cada emisora, antena y fuente recibe al darse de alta un **ID propio**,
+automático y único: `E0001` para las emisoras, `A0001` para las antenas y
+`S0001` para las fuentes. Es la primera columna de la lista y no se escribe ni
+se cambia.
+
+En **Equipos**, las casillas de emisoras, antenas y fuentes llevan sus ID o sus
+nombres, separados por comas (`E0001, E0003`), y `→` al final de la casilla
+completa lo sugerido. Una emisora sin nombre se llama «marca modelo».
+
+| Tecla | En el Inventario |
+|---|---|
+| `F5` `F6` o `RePág` `AvPág` | Pestaña anterior / siguiente |
+| `Alt+↑` `Alt+↓` | Recorre las marcas de la pestaña (filtro) |
+| `D` `E` sobre un elemento | Suprimir / editar en la línea de entrada |
+| `F1` | Vuelve al registro |
+
+Las teclas de función cambian de significado en cada ventana; las que una
+ventana no usa no hacen nada. `F1` es siempre el registro.
+
+`/marca yaesu` filtra la lista por marca (vale el principio del nombre) y
+`/marca` sola quita el filtro.
+
+**Catálogo.** Al abrir, la aplicación carga todos los ficheros de
+`hamrlog/data/preseed/`: emisoras, antenas y fuentes a la venta en tiendas
+españolas. Se cargan una sola vez —abrir de nuevo no duplica nada— y lo que
+hayas dado de alta con el mismo nombre se respeta. Los elementos del catálogo
+salen atenuados: **no se modifican ni se borran**, solo se usan al montar un
+equipo. Para añadir un catálogo basta con dejar otro `.json` en esa carpeta,
+con la forma `{"tipo": "emisoras" | "antenas" | "fuentes", "elementos": [...]}`.
+
+### Idioma
+
+La interfaz está en inglés y en español. Se elige sola según el idioma del
+sistema (`LANG`); `HAMRLOG_LANG=en` o `HAMRLOG_LANG=es` la fuerza. Las
+traducciones son ficheros `.po` en `hamrlog/locales/`.
 
 ### Comandos
 
@@ -229,7 +281,7 @@ diálogos: la confirmación de un borrado y los datos de un modo digital.
 Las pantallas de gestión se han retirado para rediseñarlas. Los datos y la
 lógica siguen en la base de datos y en `core/services.py`, pero desde la
 aplicación **no se puede**, de momento: consultar
-o editar la agenda, dar de alta equipos, antenas, repetidores o
+o editar la agenda, elegir con qué equipo trabajas, dar de alta repetidores o
 configuraciones, cambiar de operador ni tocar los ajustes (unidades, orden del
 histórico, validación de indicativos, métricas). Importar y exportar sigue
 disponible [desde la línea de órdenes](#desde-la-línea-de-órdenes).

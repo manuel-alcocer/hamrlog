@@ -238,9 +238,10 @@ async def test_deleting_with_an_empty_log_is_harmless(operator):
 
 
 async def test_main_history_shows_date_and_time(operator):
+    from hamrlog.i18n import _
     from hamrlog.tui.widgets.history import COLUMNS
 
-    assert COLUMNS[0][0] == "FECHA HORA"
+    assert _(COLUMNS[0][0]) == "FECHA HORA"
 
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
@@ -390,12 +391,14 @@ async def test_no_shortcut_opens_a_menu(operator, station):
 
 
 async def test_footer_shows_how_to_quit(operator):
+    from hamrlog.i18n import _
     from hamrlog.tui.widgets.footer import HELP_HINT, StatsFooter
 
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         await pilot.pause()
-        assert HELP_HINT in str(app.query_one(StatsFooter).render())
+        assert "F1 Registro · F2 Inventario · Ctrl+Q Salir" == _(HELP_HINT)
+        assert _(HELP_HINT) in str(app.query_one(StatsFooter).render())
 
 
 async def test_history_ends_with_the_insert_row(operator):
@@ -697,7 +700,7 @@ async def test_e_edits_the_browsed_qso_in_the_entry_line(operator):
         history = app.query_one(HistoryPanel)
         assert history.selected_qso_id() == original.id
         assert history.selected_row().call == "EA1AAB"
-        assert "EA1AAB" in str(history.get_cell(str(original.id), "INDICATIVO"))
+        assert "EA1AAB" in str(history.get_cell(str(original.id), "CALLSIGN"))
 
 
 async def test_escape_abandons_an_edit(operator):

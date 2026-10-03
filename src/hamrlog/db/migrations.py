@@ -12,6 +12,7 @@ change that renames or drops a column would need a real migration tool.
 from __future__ import annotations
 
 import logging
+from importlib import resources
 
 from sqlalchemy import Engine, insert, inspect, select, text
 from sqlalchemy.schema import Column
@@ -19,10 +20,14 @@ from sqlalchemy.schema import Column
 from .models import (
     Antenna,
     Base,
+    Contact,
+    Equipment,
     Profile,
     Qso,
     Station,
     StationType,
+    equipment_antenna_links,
+    equipment_station_links,
     station_antenna_links,
     station_profile_links,
 )
@@ -113,6 +118,77 @@ def upgrade_data(engine: Engine, previous_version: int | None) -> None:
         _assign_profiles_to_their_station(engine)
     if previous_version is None or previous_version < 5:
         _split_antennas_from_stations(engine)
+    if previous_version is not None and previous_version < 6:
+        _make_an_equipment_set_per_station(engine)
+    if previous_version is not None and previous_version < 7:
+        _english_country_names(engine)
+
+
+def _english_country_names(engine: Engine) -> None:
+    """Rename the Spanish country names older versions stored to English.
+
+    The Spanish catalog is the dictionary: its msgstr is what used to be
+    stored, its msgid is what is stored now. Names it does not know, such as
+    the ones an imported ADIF file brought, are left alone.
+    """
+    from .. import i18n
+
+    try:
+        source = resources.files("hamrlog").joinpath("locales", "es", "countries.po")
+        spanish_to_english = {
+            spanish: english
+            for english, spanish in i18n.parse_po(source.read_text(encoding="utf-8")).items()
+            if spanish != english
+        }
+    except (FileNotFoundError, OSError):
+        return
+    changed = 0
+    with engine.begin() as connection:
+        for table in (Qso.__table__, Contact.__table__):
+            for spanish, english in spanish_to_english.items():
+                result = connection.execute(
+                    table.update().where(table.c.country == spanish).values(country=english)
+                )
+                changed += result.rowcount or 0
+    if changed:
+        logger.info("schema upgrade: renamed %d country names to English", changed)
+
+
+def _make_an_equipment_set_per_station(engine: Engine) -> None:
+    """Each existing radio becomes a set of its own, with its antennas.
+
+    Before schema 6 the radio was the «equipo». Giving each one a set with
+    the same name keeps that meaning without asking the operator to rebuild
+    them by hand.
+    """
+    with engine.begin() as connection:
+        stations = connection.execute(select(Station.id, Station.name)).all()
+        for station_id, name in stations:
+            if connection.execute(
+                select(Equipment.id).where(Equipment.name == name)
+            ).first() is not None:
+                continue
+            equipment_id = connection.execute(
+                insert(Equipment).values(name=name, notes="")
+            ).inserted_primary_key[0]
+            connection.execute(
+                insert(equipment_station_links).values(
+                    equipment_id=equipment_id, station_id=station_id
+                )
+            )
+            antenna_ids = connection.execute(
+                select(station_antenna_links.c.antenna_id).where(
+                    station_antenna_links.c.station_id == station_id
+                )
+            ).scalars().all()
+            for antenna_id in antenna_ids:
+                connection.execute(
+                    insert(equipment_antenna_links).values(
+                        equipment_id=equipment_id, antenna_id=antenna_id
+                    )
+                )
+    if stations:
+        logger.info("schema upgrade: made %d equipment sets from the radios", len(stations))
 
 
 def _seed_station_types(engine: Engine) -> None:

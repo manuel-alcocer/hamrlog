@@ -153,7 +153,7 @@ class SessionState:
         if mode is None:
             return
         self.mode = mode.name
-        valid_keys = {key for key, _ in mode.digital_fields}
+        valid_keys = {key for key, _label in mode.digital_fields}
         self.digital_data = {k: v for k, v in self.digital_data.items() if k in valid_keys}
 
     def to_dict(self) -> dict[str, Any]:

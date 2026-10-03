@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   test:
-    name: Pruebas (${{ matrix.os }}, Python ${{ matrix.python }})
+    name: Tests (${{ matrix.os }}, Python ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -24,39 +24,48 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Instalar uv
+      - name: Install uv
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
 
-      - name: Instalar Python ${{ matrix.python }}
+      - name: Install Python ${{ matrix.python }}
         run: uv python install ${{ matrix.python }}
 
-      - name: Instalar el proyecto
+      - name: Install the project
         run: uv sync --python ${{ matrix.python }} --extra dev --extra metrics
 
       - name: Linter
         run: uv run ruff check src tests
 
-      - name: Pruebas
+      - name: Tests
         run: uv run pytest -q
 
   build-check:
-    name: El paquete se construye e instala
+    name: The package builds and installs
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
 
-      - name: Construir
+      - name: Build
         run: uv build
 
-      - name: Instalar el wheel en un entorno limpio y probarlo
+      - name: Install the wheel in a clean environment and try it
         run: |
           uv venv /tmp/clean
           uv pip install --python /tmp/clean/bin/python dist/*.whl
           /tmp/clean/bin/hamrlog --version
           /tmp/clean/bin/hamrlog info
+          # Translations and the equipment catalog are package data: check
+          # the wheel really carries them.
+          /tmp/clean/bin/python -c "
+          from hamrlog import i18n
+          from hamrlog.db.preseed import load_catalogs
+          assert i18n.load_catalog('es'), 'no Spanish translations in the wheel'
+          catalogs = load_catalogs()
+          assert all(catalogs.values()), catalogs.keys()
+          "
 
       - uses: actions/upload-artifact@v4
         with:

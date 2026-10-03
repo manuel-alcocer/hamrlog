@@ -14,6 +14,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from ..i18n import _
+
 #: Canonical unit suffixes, spelled as the SI requires: M for mega, k for
 #: kilo (capital K is the kelvin) and Hz for hertz. The operator may type any
 #: capitalisation and may leave the "Hz" part out.
@@ -67,7 +69,7 @@ def normalize_unit(text: str) -> str:
     match = _UNIT_RE.match(text.strip())
     if match is None:
         raise UnitError(
-            f"«{text.strip()}» no es una unidad de frecuencia. Usa M, k o Hz."
+            _("«{text}» is not a frequency unit. Use M, k or Hz.").format(text=text.strip())
         )
 
     prefix = match.group("prefix").upper()
@@ -77,15 +79,15 @@ def normalize_unit(text: str) -> str:
         return UNIT_KHZ
     if match.group("hz"):
         return UNIT_HZ
-    raise UnitError("Falta la unidad. Usa M, k o Hz.")
+    raise UnitError(_("The unit is missing. Use M, k or Hz."))
 
 
 def describe_separator(separator: str) -> str:
     """Name a separator for the settings screen."""
     if separator == "":
-        return "ocultar"
+        return _("hide")
     if separator == " ":
-        return "espacio"
+        return _("space")
     return separator
 
 
@@ -99,7 +101,7 @@ def parse_separator(text: str, *, allow_hidden: bool) -> str:
     lowered = cleaned.lower()
     if lowered in HIDDEN_WORDS:
         if not allow_hidden:
-            raise UnitError("El separador decimal no se puede ocultar.")
+            raise UnitError(_("The decimal separator cannot be hidden."))
         return ""
     if lowered in ("espacio", "space"):
         return " "
@@ -113,8 +115,15 @@ def parse_separator(text: str, *, allow_hidden: bool) -> str:
 
 
 def _reject(text: str, allow_hidden: bool) -> str:
-    options = "  .  ,  espacio  '  ocultar" if allow_hidden else "  .  ,"
-    raise UnitError(f"«{text}» no vale como separador. Opciones:{options}")
+    if allow_hidden:
+        options = "  .  ,  {space}  '  {hide}".format(space=_("space"), hide=_("hide"))
+    else:
+        options = "  .  ,"
+    raise UnitError(
+        _("«{text}» is not a valid separator. Options:{options}").format(
+            text=text, options=options
+        )
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,17 +148,25 @@ class FrequencyFormat:
         try:
             unit = normalize_unit(self.unit)
         except UnitError as exc:
-            raise UnitError(f"Unidad desconocida: «{self.unit}».") from exc
+            raise UnitError(_("Unknown unit: «{unit}».").format(unit=self.unit)) from exc
         object.__setattr__(self, "unit", unit)
 
         if self.decimal not in DECIMAL_SEPARATORS:
-            raise UnitError(f"Separador decimal no válido: «{self.decimal}».")
+            raise UnitError(
+                _("Invalid decimal separator: «{separator}».").format(separator=self.decimal)
+            )
         if self.thousands not in THOUSANDS_SEPARATORS:
-            raise UnitError(f"Separador de millar no válido: «{self.thousands}».")
+            raise UnitError(
+                _("Invalid thousands separator: «{separator}».").format(
+                    separator=self.thousands
+                )
+            )
         if self.thousands and self.thousands == self.decimal:
             raise UnitError(
-                "El separador de millar y el decimal no pueden ser el mismo "
-                f"(«{self.decimal}»)."
+                _(
+                    "The thousands and decimal separators cannot be the same "
+                    "(«{separator}»)."
+                ).format(separator=self.decimal)
             )
 
     # ------------------------------------------------------------- format --
@@ -243,9 +260,10 @@ class FrequencyFormat:
     @property
     def summary(self) -> str:
         """One line describing the settings, for the configuration screen."""
-        return (
-            f"unidad {self.unit} · decimal «{self.decimal}» · "
-            f"millar {describe_separator(self.thousands)}"
+        return _("unit {unit} · decimal «{decimal}» · thousands {thousands}").format(
+            unit=self.unit,
+            decimal=self.decimal,
+            thousands=describe_separator(self.thousands),
         )
 
 

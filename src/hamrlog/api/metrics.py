@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import logging
 
+from ..i18n import _
+
 logger = logging.getLogger(__name__)
 
 NAMESPACE = "hamrlog"
@@ -36,31 +38,31 @@ def build_collector():  # type: ignore[no-untyped-def]
             stats = QsoService.stats()
 
             yield GaugeMetricFamily(
-                f"{NAMESPACE}_qso_total", "Contactos registrados en total", value=stats.total
+                f"{NAMESPACE}_qso_total", "QSOs logged in total", value=stats.total
             )
             yield GaugeMetricFamily(
-                f"{NAMESPACE}_qso_today", "Contactos registrados hoy (UTC)", value=stats.today
+                f"{NAMESPACE}_qso_today", "QSOs logged today (UTC)", value=stats.today
             )
             yield GaugeMetricFamily(
                 f"{NAMESPACE}_unique_callsigns_total",
-                "Indicativos distintos trabajados",
+                "Distinct callsigns worked",
                 value=stats.unique_calls,
             )
             yield GaugeMetricFamily(
                 f"{NAMESPACE}_countries_total",
-                "Entidades DXCC distintas trabajadas",
+                "Distinct DXCC entities worked",
                 value=stats.countries,
             )
 
             by_band = GaugeMetricFamily(
-                f"{NAMESPACE}_qso_by_band", "Contactos por banda", labels=["band"]
+                f"{NAMESPACE}_qso_by_band", "QSOs per band", labels=["band"]
             )
             for band, count in stats.by_band.items():
                 by_band.add_metric([band], count)
             yield by_band
 
             by_mode = GaugeMetricFamily(
-                f"{NAMESPACE}_qso_by_mode", "Contactos por modo", labels=["mode"]
+                f"{NAMESPACE}_qso_by_mode", "QSOs per mode", labels=["mode"]
             )
             for mode, count in stats.by_mode.items():
                 by_mode.add_metric([mode], count)
@@ -99,11 +101,14 @@ def serve_forever(port: int = 9119) -> int:
     import time
 
     if not is_available():
-        print("Instala el extra de métricas: pip install hamrlog[metrics]")
+        print(_("Install the metrics extra: pip install hamrlog[metrics]"))
         return 1
     if not start_exporter(port):
         return 1
-    print(f"Exportador Prometheus en http://localhost:{port}/metrics  (Ctrl+C para salir)")
+    print(
+        _("Prometheus exporter at http://localhost:{port}/metrics  (Ctrl+C to quit)")
+        .format(port=port)
+    )
     try:
         while True:
             time.sleep(3600)

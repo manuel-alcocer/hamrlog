@@ -26,6 +26,7 @@ from sqlalchemy import (
     Column,
     DateTime,
     Enum,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -118,10 +119,17 @@ class Antenna(Base):
     __tablename__ = "antennas"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    #: The operator's identifier, E0001 / A0001 / S0001 (see db/codes.py).
+    #: Unique; separate from the internal autoincrement id.
+    code: Mapped[str | None] = mapped_column(String(16), unique=True, index=True, nullable=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     #: ADIF band names, e.g. ["2m", "70cm"]. Empty means not stated.
     bands: Mapped[list[str]] = mapped_column(default=list)
     notes: Mapped[str] = mapped_column(Text, default="")
+    #: Manufacturer, used to filter the lists.
+    brand: Mapped[str] = mapped_column(String(80), default="", index=True)
+    #: From the bundled catalog (preseed): read-only, only used in sets.
+    preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -171,6 +179,9 @@ class Station(Base):
     __tablename__ = "stations"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    #: The operator's identifier, E0001 / A0001 / S0001 (see db/codes.py).
+    #: Unique; separate from the internal autoincrement id.
+    code: Mapped[str | None] = mapped_column(String(16), unique=True, index=True, nullable=True)
     name: Mapped[str] = mapped_column(String(80), unique=True, index=True)
     rig: Mapped[str] = mapped_column(String(120), default="")
     #: Legacy: the antenna as free text, before schema 5 made antennas their
@@ -178,6 +189,10 @@ class Station(Base):
     antenna: Mapped[str] = mapped_column(String(120), default="")
     power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     notes: Mapped[str] = mapped_column(Text, default="")
+    #: Manufacturer, used to filter the lists.
+    brand: Mapped[str] = mapped_column(String(80), default="", index=True)
+    #: From the bundled catalog (preseed): read-only, only used in sets.
+    preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     types: Mapped[list[StationType]] = relationship(
@@ -215,6 +230,82 @@ class Station(Base):
         if self.power_w:
             parts.append(f"{self.power_w} W")
         return " / ".join(parts)
+
+
+class PowerSupply(Base):
+    """A power supply: a mains unit, a battery, a solar charger..."""
+
+    __tablename__ = "power_supplies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    #: The operator's identifier, E0001 / A0001 / S0001 (see db/codes.py).
+    #: Unique; separate from the internal autoincrement id.
+    code: Mapped[str | None] = mapped_column(String(16), unique=True, index=True, nullable=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    voltage_v: Mapped[float | None] = mapped_column(Float, nullable=True)
+    current_a: Mapped[float | None] = mapped_column(Float, nullable=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    #: Manufacturer, used to filter the lists.
+    brand: Mapped[str] = mapped_column(String(80), default="", index=True)
+    #: From the bundled catalog (preseed): read-only, only used in sets.
+    preset: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<PowerSupply {self.name}>"
+
+
+#: What each equipment set is made of. Radios, antennas and supplies are
+#: registered on their own and can belong to several sets.
+equipment_station_links = Table(
+    "equipment_station_links",
+    Base.metadata,
+    Column("equipment_id", ForeignKey("equipment.id", ondelete="CASCADE"), primary_key=True),
+    Column("station_id", ForeignKey("stations.id", ondelete="CASCADE"), primary_key=True),
+)
+equipment_antenna_links = Table(
+    "equipment_antenna_links",
+    Base.metadata,
+    Column("equipment_id", ForeignKey("equipment.id", ondelete="CASCADE"), primary_key=True),
+    Column("antenna_id", ForeignKey("antennas.id", ondelete="CASCADE"), primary_key=True),
+)
+equipment_supply_links = Table(
+    "equipment_supply_links",
+    Base.metadata,
+    Column("equipment_id", ForeignKey("equipment.id", ondelete="CASCADE"), primary_key=True),
+    Column(
+        "supply_id", ForeignKey("power_supplies.id", ondelete="CASCADE"), primary_key=True
+    ),
+)
+
+
+class Equipment(Base):
+    """A set the operator works with: one or more radios (``Station``, shown
+    as «emisora»), plus the antennas and power supplies that go with them.
+
+    Shown to the operator as an «equipo». It must hold at least one radio;
+    the service enforces it.
+    """
+
+    __tablename__ = "equipment"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    notes: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    stations: Mapped[list[Station]] = relationship(
+        secondary=equipment_station_links, order_by="Station.name"
+    )
+    antennas: Mapped[list[Antenna]] = relationship(
+        secondary=equipment_antenna_links, order_by="Antenna.name"
+    )
+    supplies: Mapped[list[PowerSupply]] = relationship(
+        secondary=equipment_supply_links, order_by="PowerSupply.name"
+    )
+
+    def __repr__(self) -> str:  # pragma: no cover - debugging aid
+        return f"<Equipment {self.name}>"
 
 
 class Contact(Base):
@@ -456,4 +547,9 @@ class SchemaVersion(Base):
 #: 3 added the contacts address book.
 #: 4 added station types and the station to configuration assignments.
 #: 5 made antennas a table of their own, assigned to stations, with bands.
-CURRENT_SCHEMA_VERSION = 5
+#: 6 added power supplies, equipment sets of radios, antennas and supplies,
+#:   the read-only catalog (preset) of radios, antennas and supplies, and
+#:   the brand of each.
+#: 7 stores country names in English, as ADIF does; they are translated when shown.
+#: 8 gives radios, antennas and supplies their own unique code (E0001, A0001, S0001).
+CURRENT_SCHEMA_VERSION = 8

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+from ..i18n import N_, _
 from . import bands, callsign, modes
 
 #: Field order used when the active profile does not override it.
@@ -55,6 +56,22 @@ DIGITAL_KEYS: frozenset[str] = frozenset(
 )
 
 COMMAND_PREFIXES = ("/", ":")
+
+#: Field -> name shown in the hint under the entry line. English, translated
+#: with _() where shown; every one is also accepted as a ``key=`` alias.
+ORDER_HINTS: dict[str, str] = {
+    "call": N_("call"),
+    "name": N_("name"),
+    "rst_sent": N_("rst_sent"),
+    "rst_rcvd": N_("rst_rcvd"),
+    "qth": "qth",
+    "gridsquare": "locator",
+    "comment": N_("comment"),
+    "band": N_("band"),
+    "mode": N_("mode"),
+    "freq_hz": N_("freq"),
+    "power_w": N_("power"),
+}
 
 #: How a malformed callsign is treated.
 #: "strict" refuses the line, "warn" logs it with a notice, "off" accepts it.
@@ -98,7 +115,7 @@ def is_command(line: str) -> bool:
 def parse_command(line: str) -> ParsedCommand:
     """Split ``/band 20m`` into its name and argument."""
     stripped = line.strip()[1:].strip()
-    name, _, argument = stripped.partition(" ")
+    name, _sep, argument = stripped.partition(" ")
     return ParsedCommand(name=name.strip().lower(), argument=argument.strip())
 
 
@@ -131,7 +148,7 @@ def parse(
     result = ParsedEntry()
     text = line.strip()
     if not text:
-        result.error = "La línea está vacía."
+        result.error = _("The line is empty.")
         return result
 
     tokens = [token.strip() for token in text.split(separator)]
@@ -139,10 +156,12 @@ def parse(
     positional: list[str] = []
     for token in tokens:
         if "=" in token:
-            raw_key, _, value = token.partition("=")
+            raw_key, _sep, value = token.partition("=")
             key = _canonical_key(raw_key)
             if key is None:
-                result.warnings.append(f"Campo desconocido «{raw_key.strip()}», ignorado.")
+                result.warnings.append(
+                    _("Unknown field «{field}», ignored.").format(field=raw_key.strip())
+                )
                 continue
             if key in DIGITAL_KEYS:
                 result.digital[key] = value.strip()
@@ -160,18 +179,20 @@ def parse(
             result.fields[name] = value
     if len(positional) > len(available):
         extra = separator.join(positional[len(available):])
-        result.warnings.append(f"Sobran valores, añadidos al comentario: «{extra}»")
+        result.warnings.append(
+            _("Extra values, added to the comment: «{extra}»").format(extra=extra)
+        )
         previous = str(result.fields.get("comment", "")).strip()
         result.fields["comment"] = f"{previous} {extra}".strip()
 
     raw_call = str(result.fields.get("call", "")).strip()
     if not raw_call:
-        result.error = "Falta el indicativo."
+        result.error = _("The callsign is missing.")
         return result
 
     raw_call, forced = callsign.strip_override(raw_call)
     if not raw_call:
-        result.error = "Falta el indicativo."
+        result.error = _("The callsign is missing.")
         return result
 
     return finish(result, mode_name=mode_name, validation=validation)
@@ -198,12 +219,12 @@ def finish(
     """
     raw_call = str(result.fields.get("call", "")).strip()
     if not raw_call:
-        result.error = "Falta el indicativo."
+        result.error = _("The callsign is missing.")
         return result
 
     raw_call, forced = callsign.strip_override(raw_call)
     if not raw_call:
-        result.error = "Falta el indicativo."
+        result.error = _("The callsign is missing.")
         return result
 
     result.fields["call"] = callsign.normalize(raw_call)
@@ -214,7 +235,7 @@ def finish(
             return result
         result.warnings.append(problem)
     elif forced:
-        result.warnings.append("No hacía falta forzar: el indicativo es correcto.")
+        result.warnings.append(_("No need to force it: the callsign is valid."))
 
     country = callsign.country_for(raw_call)
     if country:
@@ -264,7 +285,9 @@ def _normalize_values(result: ParsedEntry, mode_name: str | None) -> None:
     if "freq_hz" in fields:
         parsed = bands.parse_frequency(str(fields["freq_hz"]))
         if parsed is None:
-            result.warnings.append(f"Frecuencia no reconocida: «{fields['freq_hz']}»")
+            result.warnings.append(
+                _("Frequency not recognised: «{value}»").format(value=fields["freq_hz"])
+            )
             del fields["freq_hz"]
         else:
             fields["freq_hz"] = parsed
@@ -275,7 +298,7 @@ def _normalize_values(result: ParsedEntry, mode_name: str | None) -> None:
     if "band" in fields:
         band = bands.get(str(fields["band"]))
         if band is None:
-            result.warnings.append(f"Banda desconocida: «{fields['band']}»")
+            result.warnings.append(_("Unknown band: «{value}»").format(value=fields["band"]))
             del fields["band"]
         else:
             fields["band"] = band.name
@@ -284,7 +307,7 @@ def _normalize_values(result: ParsedEntry, mode_name: str | None) -> None:
     if "mode" in fields:
         mode = modes.get(str(fields["mode"]))
         if mode is None:
-            result.warnings.append(f"Modo desconocido: «{fields['mode']}»")
+            result.warnings.append(_("Unknown mode: «{value}»").format(value=fields["mode"]))
             del fields["mode"]
         else:
             fields["mode"] = mode.name
@@ -293,7 +316,9 @@ def _normalize_values(result: ParsedEntry, mode_name: str | None) -> None:
         try:
             fields["power_w"] = int(float(str(fields["power_w"]).replace(",", ".")))
         except ValueError:
-            result.warnings.append(f"Potencia no numérica: «{fields['power_w']}»")
+            result.warnings.append(
+                _("Power is not a number: «{value}»").format(value=fields["power_w"])
+            )
             del fields["power_w"]
 
 
@@ -347,18 +372,9 @@ def values_from_row(
 
 
 def describe_order(field_order: tuple[str, ...], separator: str = ",") -> str:
-    """Hint line shown under the entry field, e.g. 'indicativo , nombre , ...'."""
-    spanish = {
-        "call": "indicativo",
-        "name": "nombre",
-        "rst_sent": "rst_env",
-        "rst_rcvd": "rst_rec",
-        "qth": "qth",
-        "gridsquare": "locator",
-        "comment": "notas",
-        "band": "banda",
-        "mode": "modo",
-        "freq_hz": "frecuencia",
-        "power_w": "potencia",
-    }
-    return f" {separator} ".join(spanish.get(name, name) for name in field_order)
+    """Hint line shown under the entry field, e.g. 'call , name , ...'.
+
+    Each hint is a key the operator may type in ``key=value`` form, in the
+    language of the interface.
+    """
+    return f" {separator} ".join(_(ORDER_HINTS.get(name, name)) for name in field_order)

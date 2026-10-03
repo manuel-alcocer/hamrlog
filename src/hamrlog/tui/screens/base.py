@@ -12,6 +12,8 @@ from textual.containers import Horizontal, Vertical, VerticalScroll
 from textual.screen import ModalScreen, ScreenResultType
 from textual.widgets import Button, Input, Label, Static
 
+from ...i18n import N_, _
+
 
 class PanelScreen(ModalScreen[ScreenResultType]):
     """A dialog drawn in the main panel instead of a floating box.
@@ -34,7 +36,7 @@ class PanelScreen(ModalScreen[ScreenResultType]):
     _keys: str = ""
 
     def on_mount(self) -> None:
-        # The title goes on the frame, as «Registro» does on the log.
+        # The title goes on the frame, as «Log» does on the log.
         panel = self.query(".modal").first()
         titles = panel.query(".modal-title")
         if titles:
@@ -102,20 +104,21 @@ class ConfirmScreen(PanelScreen[bool]):
 
     Three ways to answer, because a confirmation appears at the moment the
     operator is least willing to stop and think: the arrow keys move between
-    the buttons as they are laid out, Tab cycles them, and S/N answer outright.
+    the buttons as they are laid out, Tab cycles them, and Y (or S, for «sí»)
+    and N answer outright.
     """
 
     BINDINGS = [
-        Binding("escape", "no", "No"),
-        Binding("y", "yes", "Sí", show=False),
-        Binding("s", "yes", "Sí", show=False),
-        Binding("n", "no", "No", show=False),
-        # Positional: Sí is drawn on the left, No on the right. Inputs consume
+        Binding("escape", "no", N_("No")),
+        Binding("y", "yes", N_("Yes"), show=False),
+        Binding("s", "yes", N_("Yes"), show=False),
+        Binding("n", "no", N_("No"), show=False),
+        # Positional: Yes is drawn on the left, No on the right. Inputs consume
         # the arrows first, so these only fire once a button holds the focus.
-        Binding("left", "focus_yes", "Sí", show=False),
-        Binding("right", "focus_no", "No", show=False),
-        Binding("up", "focus_yes", "Sí", show=False),
-        Binding("down", "focus_no", "No", show=False),
+        Binding("left", "focus_yes", N_("Yes"), show=False),
+        Binding("right", "focus_no", N_("No"), show=False),
+        Binding("up", "focus_yes", N_("Yes"), show=False),
+        Binding("down", "focus_no", N_("No"), show=False),
     ]
 
     def __init__(self, question: str, *, detail: str = "", danger: bool = False) -> None:
@@ -131,11 +134,11 @@ class ConfirmScreen(PanelScreen[bool]):
                 yield Static(self.detail, classes="modal-subtitle")
             with Horizontal(classes="modal-buttons"):
                 yield Button(
-                    "Sí (S)", variant="error" if self.danger else "primary", id="yes"
+                    _("Yes (Y)"), variant="error" if self.danger else "primary", id="yes"
                 )
-                yield Button("No (Esc)", variant="default", id="no")
+                yield Button(_("No (Esc)"), variant="default", id="no")
             yield Static(
-                "←→ elegir · Enter confirma · S sí · N o Esc no",
+                _("←→ choose · Enter confirms · Y yes · N or Esc no"),
                 classes="modal-help",
             )
 
@@ -184,15 +187,15 @@ class Field:
 class FormScreen(PanelScreen[dict[str, str] | None]):
     """Small vertical form; dismisses with a dict of values or None."""
 
-    _keys = "Tab campo siguiente · Enter o Ctrl+S guardar · Esc cancelar"
+    _keys = N_("Tab next field · Enter or Ctrl+S save · Esc cancel")
 
     BINDINGS = [
-        Binding("escape", "cancel", "Cancelar"),
-        Binding("ctrl+s", "save", "Guardar"),
+        Binding("escape", "cancel", N_("Cancel")),
+        Binding("ctrl+s", "save", N_("Save")),
         # Only reached once a button has the focus: the text fields use the
         # arrows to move the caret.
-        Binding("left", "focus_save", "Guardar", show=False),
-        Binding("right", "focus_cancel", "Cancelar", show=False),
+        Binding("left", "focus_save", N_("Save"), show=False),
+        Binding("right", "focus_cancel", N_("Cancel"), show=False),
     ]
 
     def __init__(
@@ -201,13 +204,13 @@ class FormScreen(PanelScreen[dict[str, str] | None]):
         fields: list[Field],
         *,
         subtitle: str = "",
-        save_label: str = "Guardar",
+        save_label: str = "",
     ) -> None:
         super().__init__()
         self.title_text = title
         self.subtitle_text = subtitle
         self.fields = fields
-        self.save_label = save_label
+        self.save_label = save_label or _("Save")
 
     def compose(self) -> ComposeResult:
         with Vertical(classes="modal"):
@@ -234,7 +237,7 @@ class FormScreen(PanelScreen[dict[str, str] | None]):
             yield Static("", id="form-error", classes="form-error")
             with Horizontal(classes="modal-buttons"):
                 yield Button(f"{self.save_label} (Ctrl+S)", variant="primary", id="save")
-                yield Button("Cancelar (Esc)", id="cancel")
+                yield Button(_("Cancel (Esc)"), id="cancel")
 
     def on_mount(self) -> None:
         for field in self.fields:

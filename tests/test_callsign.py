@@ -32,11 +32,11 @@ def test_is_valid(raw, valid):
 @pytest.mark.parametrize(
     ("raw", "country"),
     [
-        ("EA7WM", "España"),
-        ("EA8ABC", "Islas Canarias"),
-        ("EA9XX", "Ceuta y Melilla"),
-        ("DL2JKL", "Alemania"),
-        ("9A1AA", "Croacia"),
+        ("EA7WM", "Spain"),
+        ("EA8ABC", "Canary Islands"),
+        ("EA9XX", "Ceuta & Melilla"),
+        ("DL2JKL", "Germany"),
+        ("9A1AA", "Croatia"),
         ("ZZ9ZZ", ""),
     ],
 )
@@ -46,7 +46,7 @@ def test_country_for(raw, country):
 
 def test_portable_prefix_wins_over_home_call():
     """F/EA7WM is a Spaniard operating in France, so the entity is France."""
-    assert callsign.country_for("F/EA7WM") == "Francia"
+    assert callsign.country_for("F/EA7WM") == "France"
 
 
 @pytest.mark.parametrize(
