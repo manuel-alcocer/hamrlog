@@ -7,8 +7,9 @@
 - `F2` convierte el recuadro del registro en el **Inventario**, con cuatro
   pestañas: Equipos, Emisoras, Antenas y Fuentes. Funciona como el registro:
   lista arriba, `<Nuevo …>` al final y la línea de entrada para escribir.
-  `F5` `F6` o `RePág` `AvPág` cambian de pestaña y `F1` vuelve al registro; lo
-  que estuvieras escribiendo en cada sitio se conserva.
+  `F5` `F6` o `Mayús+RePág` `Mayús+AvPág` cambian de pestaña, `RePág` `AvPág`
+  pasan página en la lista de cada ventana y `F1` vuelve al registro; lo que
+  estuvieras escribiendo en cada sitio se conserva.
 - Las teclas de función dependen de la ventana. `F1` es siempre el registro;
   la que una ventana no usa no hace nada.
 - Un **equipo** es un conjunto de al menos una emisora, con antenas y fuentes.
@@ -32,8 +33,8 @@ alta.
 ### Inglés y español
 
 - Todo el código y los textos de origen pasan a inglés; el español es una
-  traducción en `hamrlog/locales/es/*.po`. El idioma sale del sistema y se
-  fuerza con `HAMRLOG_LANG=en|es`.
+  traducción en `hamrlog/locales/es/*.po`. El idioma sale del sistema (en
+  Windows, del idioma de su interfaz) y se fuerza con `HAMRLOG_LANG=en|es`.
 - Los países se guardan con su nombre inglés, como los usa ADIF, y se
   muestran traducidos.
 

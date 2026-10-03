@@ -233,7 +233,7 @@ async def test_items_are_written_in_the_entry_line(operator):
         await open_tab(pilot, app, steps=1)  # reopens on Emisoras: one more is Antenas
         assert "Antenas" in str(app.query_one("#inventory-tabs").render())
         await submit(pilot, app, {"brand": "Diamond", "name": "X-300N", "bands": "70cm, 2m"})
-        await pilot.press("pagedown")
+        await pilot.press("shift+pagedown")
         await pilot.pause()
         await pilot.pause()
         await submit(pilot, app, {"name": "Batería", "voltage_v": "12,8", "current_a": "20"})
@@ -336,8 +336,8 @@ async def test_function_keys_belong_to_the_view(operator):
             )
 
         assert active() == "Equipos"
-        for key, expected in (("f6", "Emisoras"), ("pagedown", "Antenas"),
-                              ("f5", "Emisoras"), ("pageup", "Equipos"),
+        for key, expected in (("f6", "Emisoras"), ("shift+pagedown", "Antenas"),
+                              ("f5", "Emisoras"), ("shift+pageup", "Equipos"),
                               ("f5", "Fuentes")):
             await pilot.press(key)
             await pilot.pause()
@@ -462,3 +462,40 @@ def test_the_bundled_catalog_is_well_formed():
         assert set(radio["types"]) <= type_names, radio["name"]
     for antenna in catalogs["antenas"]:
         assert all(bands.get(name) for name in antenna["bands"]), antenna["name"]
+
+
+async def test_page_keys_page_through_the_list_of_each_view(operator):
+    from hamrlog.core.services import QsoService
+    from hamrlog.core.state import SessionState
+
+    state = SessionState(operator_id=operator.id)
+    state.set_band("40m")
+    for number in range(40):
+        QsoService.log({"call": f"EA4A{chr(65 + number % 26)}{number}"}, state)
+    for number in range(40):
+        StationService.create(f"Radio {number:02d}")
+
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        history = app.query_one(HistoryPanel)
+        bottom = history.cursor_row
+        await pilot.press("pageup")
+        await pilot.pause()
+        page = bottom - history.cursor_row
+        assert page > 1
+        assert page == history.size.height - 1
+        await pilot.press("pagedown")
+        await pilot.pause()
+        assert history.cursor_row == bottom
+
+        await open_tab(pilot, app, steps=1)
+        table = app.query_one(ItemTable)
+        tabs_before = str(app.query_one("#inventory-tabs").render())
+        insert_row = table.cursor_row
+        await pilot.press("pageup")
+        await pilot.pause()
+        assert insert_row - table.cursor_row == table.size.height - 1
+        # Paging moves the list, never the tab.
+        assert str(app.query_one("#inventory-tabs").render()) == tabs_before
+        assert app.query_one(EntryPanel).browsing

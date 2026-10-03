@@ -740,3 +740,9 @@ msgstr "(sin guardar)"
 
 msgid "ID"
 msgstr "ID"
+
+msgid "Previous tab"
+msgstr "Pestaña anterior"
+
+msgid "Next tab"
+msgstr "Pestaña siguiente"

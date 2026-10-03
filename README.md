@@ -202,7 +202,7 @@ quién es.
 | `Esc` | Vuelve a `<Insertar nuevo>` |
 | `F1` | **Registro**, desde cualquier ventana |
 | `F2` | **Inventario** |
-| `RePág` `AvPág` | Recorren el histórico de diez en diez |
+| `RePág` `AvPág` | Recorren el histórico página a página |
 | `Ctrl+Q` | Salir |
 
 Lo que hereda cada QSO se cambia con comandos.
@@ -231,7 +231,8 @@ completa lo sugerido. Una emisora sin nombre se llama «marca modelo».
 
 | Tecla | En el Inventario |
 |---|---|
-| `F5` `F6` o `RePág` `AvPág` | Pestaña anterior / siguiente |
+| `F5` `F6` o `Mayús+RePág` `Mayús+AvPág` | Pestaña anterior / siguiente |
+| `RePág` `AvPág` | Recorren la lista página a página |
 | `Alt+↑` `Alt+↓` | Recorre las marcas de la pestaña (filtro) |
 | `D` `E` sobre un elemento | Suprimir / editar en la línea de entrada |
 | `F1` | Vuelve al registro |
@@ -253,7 +254,8 @@ con la forma `{"tipo": "emisoras" | "antenas" | "fuentes", "elementos": [...]}`.
 ### Idioma
 
 La interfaz está en inglés y en español. Se elige sola según el idioma del
-sistema (`LANG`); `HAMRLOG_LANG=en` o `HAMRLOG_LANG=es` la fuerza. Las
+sistema (`LANG` en Linux, el idioma de la interfaz en Windows);
+`HAMRLOG_LANG=en` o `HAMRLOG_LANG=es` la fuerza. Las
 traducciones son ficheros `.po` en `hamrlog/locales/`.
 
 ### Comandos

@@ -26,6 +26,7 @@ from __future__ import annotations
 import locale
 import logging
 import os
+import sys
 from importlib import resources
 
 logger = logging.getLogger(__name__)
@@ -41,19 +42,47 @@ _catalog: dict[str, str] | None = None
 _language: str | None = None
 
 
+#: Windows names its locales in English words ("Spanish_Spain"), not codes.
+WINDOWS_NAMES = {"spanish": "es", "english": "en"}
+
+
 def detect_language() -> str:
-    """The language to use: HAMRLOG_LANG, then the system locale, then English."""
+    """The language to use: HAMRLOG_LANG, then the system's, then English."""
     candidates = [os.environ.get(LANG_ENV, "")]
     candidates += [os.environ.get(name, "") for name in ("LC_ALL", "LC_MESSAGES", "LANG")]
+    candidates.append(_windows_ui_language())
     try:
         candidates.append(locale.getlocale()[0] or "")
     except ValueError:  # pragma: no cover - unusual locale settings
         pass
     for value in candidates:
-        code = value.split(".")[0].split("_")[0].split("-")[0].lower()
+        code = language_code(value)
         if code in AVAILABLE:
             return code
     return SOURCE_LANGUAGE
+
+
+def language_code(value: str) -> str:
+    """"es_ES.UTF-8", "es-ES", "Spanish_Spain.1252" -> "es"."""
+    head = value.split(".")[0].split("_")[0].split("-")[0].strip().lower()
+    return WINDOWS_NAMES.get(head, head)
+
+
+def _windows_ui_language() -> str:
+    """The language of the Windows interface, e.g. "es_ES"; empty elsewhere.
+
+    Windows rarely sets LANG, and Python's locale reflects the regional
+    format rather than the language the user reads, so ask the system.
+    """
+    if sys.platform != "win32":
+        return ""
+    try:
+        import ctypes
+
+        lcid = ctypes.windll.kernel32.GetUserDefaultUILanguage()  # type: ignore[attr-defined]
+        return locale.windows_locale.get(lcid, "")
+    except (AttributeError, OSError):  # pragma: no cover - only on odd systems
+        return ""
 
 
 def set_language(language: str | None = None) -> str:

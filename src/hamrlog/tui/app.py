@@ -118,6 +118,10 @@ class HamrlogApp(App[None]):
                 priority=True, show=False),
         Binding("pagedown", "function_key('pagedown')", N_("Next page"),
                 priority=True, show=False),
+        Binding("shift+pageup", "function_key('shift+pageup')", N_("Previous tab"),
+                priority=True, show=False),
+        Binding("shift+pagedown", "function_key('shift+pagedown')", N_("Next tab"),
+                priority=True, show=False),
         Binding("alt+up", "cycle_brand(-1)", N_("Previous brand"), priority=True, show=False),
         Binding("alt+down", "cycle_brand(1)", N_("Next brand"), priority=True, show=False),
         Binding("ctrl+d", "delete_qso", N_("Delete QSO"), priority=True),
@@ -985,12 +989,13 @@ class HamrlogApp(App[None]):
         return "log" if self._view == "log" else self._kind.key
 
     async def action_function_key(self, key: str) -> None:
-        """F1 to F12, Page Up and Page Down: each view gives them its meaning.
+        """F1 to F12 and the page keys: each view gives them its meaning.
 
-        F1 is the log from anywhere. In the log, F2 opens the inventory view
-        and the page keys move the history ten rows. In the inventory view,
-        F5/F6 and the page keys change tab; F2 does nothing there yet. Over a
-        dialog the key is passed on to it.
+        F1 is the log from anywhere, and in the log F2 opens the inventory
+        view (where it does nothing yet). Page Up and Page Down page through
+        the list of whichever view is showing; in the inventory, F5/F6 and
+        Shift+Page Up/Down change tab. Over a dialog the key is passed on to
+        it.
         """
         if self._modal_open:
             raise SkipAction()
@@ -998,17 +1003,29 @@ class HamrlogApp(App[None]):
             if self._view != "log":
                 await self._show_view("log")
             return
+        if key in ("pageup", "pagedown"):
+            if self._editing_id is None:
+                self._page(-1 if key == "pageup" else 1)
+            return
         if self._view == "log":
             if key == "f2":
                 await self._show_view("inventory")
-            elif key in ("pageup", "pagedown") and self._editing_id is None:
-                delta = -10 if key == "pageup" else 10
-                self.query_one(HistoryPanel).move_selection(delta)
             return
-        if key in ("f5", "pageup"):
+        if key in ("f5", "shift+pageup"):
             await self._show_view("inventory", (self._tab - 1) % len(KINDS))
-        elif key in ("f6", "pagedown"):
+        elif key in ("f6", "shift+pagedown"):
             await self._show_view("inventory", (self._tab + 1) % len(KINDS))
+
+    def _page(self, direction: int) -> None:
+        """Move the cursor of the list in view by as many rows as it shows."""
+        table = (
+            self.query_one(HistoryPanel)
+            if self._view == "log"
+            else self.query_one(ItemTable)
+        )
+        # The header takes one row of the table's height.
+        rows = max(1, table.size.height - 1)
+        table.move_selection(direction * rows)
 
     async def _show_view(self, view: str, tab: int | None = None) -> None:
         """Turn the main frame and the entry line to the log or to a tab.

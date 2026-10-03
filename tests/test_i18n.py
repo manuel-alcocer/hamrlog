@@ -92,7 +92,26 @@ def test_language_comes_from_the_override_then_the_locale(monkeypatch, env, expe
     for name, value in env.items():
         monkeypatch.setenv(name, value)
     monkeypatch.setattr(i18n.locale, "getlocale", lambda: (None, None))
+    monkeypatch.setattr(i18n, "_windows_ui_language", lambda: "")
     assert i18n.detect_language() == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "code"),
+    [("es_ES.UTF-8", "es"), ("es-ES", "es"), ("Spanish_Spain.1252", "es"),
+     ("English_United States.1252", "en"), ("C.UTF-8", "c"), ("", "")],
+)
+def test_language_codes_from_unix_and_windows_names(value, code):
+    assert i18n.language_code(value) == code
+
+
+def test_windows_takes_the_language_of_its_interface(monkeypatch):
+    """Windows seldom sets LANG: the user interface language decides."""
+    for name in ("HAMRLOG_LANG", "LC_ALL", "LC_MESSAGES", "LANG"):
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setattr(i18n, "_windows_ui_language", lambda: "es_ES")
+    monkeypatch.setattr(i18n.locale, "getlocale", lambda: ("English_United States", "1252"))
+    assert i18n.detect_language() == "es"
 
 
 def test_english_is_the_source_and_spanish_translates():
