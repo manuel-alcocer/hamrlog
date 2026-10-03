@@ -2,6 +2,19 @@
 
 ## Sin publicar
 
+### Agenda (`F3`)
+
+- `F3` muestra la agenda como lista en el recuadro del registro: alta,
+  edición (`E`) y borrado (`D`) desde la línea de entrada, que aquí tiene dos
+  filas de casillas (indicativo, nombre, apellidos, ID DMR, locator; ciudad,
+  provincia, país, correo, notas).
+- `/buscar texto` busca en indicativo, nombre, ciudad, provincia, país o ID
+  DMR; la lista enseña como mucho 500 fichas y la cabecera dice cuántas hay.
+- El país se escribe en tu idioma y se guarda en inglés.
+- Editar una ficha comprueba que el indicativo y el ID DMR no estén ya en
+  otra.
+- El pie se acorta en terminales estrechos en vez de quitar la ayuda entera.
+
 ### Inventario (`F2`)
 
 - `F2` convierte el recuadro del registro en el **Inventario**, con cuatro
@@ -62,15 +75,18 @@ Las pantallas de menú se retiran para rediseñarlas; queda la vista principal.
 - El registro tiene columna **QTH**; ya no se repite entre las notas.
 - Columnas del registro: INFO, fecha y hora, indicativo, nombre, frecuencia,
   modo, equipo, país y QTH. Salen banda, RST y notas, que siguen en el
-  detalle. INFO marca `S` (seleccionado) y `E` (error). La fecha va sin
+  detalle. INFO marca `S` (seleccionado), `E` (error) y `d` (el nombre no
+  coincide con el de la agenda; el detalle dice cuál es). La fecha va sin
   segundos: `DD/MM/AA HH:MM` en español, `AA/MM/DD HH:MM` en inglés.
 - `Espacio` marca QSO del registro y `Ctrl+A` los marca o desmarca todos. Con
   más de uno marcado, `E` edita a la vez su frecuencia, modo y equipo.
 - Las listas ya no muestran barra de desplazamiento horizontal: con solo
   teclado no se podía usar; la última columna se acorta.
 - Una raya separa las pestañas del Inventario de su lista.
-- Al registrar un QSO con nombre, si el indicativo ya estaba en la agenda pero
-  sin nombre, la ficha lo toma. Si no estaba, se crea con él, como antes.
+- Al registrar un QSO, si el indicativo ya estaba en la agenda pero sin nombre
+  o sin ciudad, la ficha toma el nombre y el QTH del QSO. Lo que ya tenía no
+  se cambia, ni tampoco los QSO anteriores. Si no estaba, se crea, como
+  antes.
 - Se mantienen la confirmación de borrado, el asistente del primer arranque y
   la petición de datos de los modos digitales.
 - Sin interfaz por ahora: agenda, alta de equipos, antenas,

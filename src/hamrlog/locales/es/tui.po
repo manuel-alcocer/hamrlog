@@ -791,3 +791,85 @@ msgstr "INFO"
 
 msgid "%y/%m/%d %H:%M"
 msgstr "%d/%m/%y %H:%M"
+
+# Address book view (F3).
+msgid "Address book"
+msgstr "Agenda"
+
+msgid "<New contact>"
+msgstr "<Nuevo contacto>"
+
+msgid "NEW CONTACT   callsign, name and whatever else you know of the station"
+msgstr "NUEVO CONTACTO   indicativo, nombre y lo que sepas de la estación"
+
+msgid "DMR ID: number · GRID: locator · COUNTRY in your language, stored in English"
+msgstr "ID DMR: número · LOC: locator · PAÍS en tu idioma, se guarda en inglés"
+
+msgid "/search TEXT looks up callsign, name, city, province, country or DMR ID"
+msgstr "/buscar TEXTO busca en indicativo, nombre, ciudad, provincia, país o ID DMR"
+
+msgid "DMR ID"
+msgstr "ID DMR"
+
+msgid "PROVINCE"
+msgstr "PROVINCIA"
+
+msgid "QSO"
+msgstr "QSO"
+
+msgid "SURNAME"
+msgstr "APELLIDOS"
+
+msgid "CITY"
+msgstr "CIUDAD"
+
+msgid "EMAIL"
+msgstr "CORREO"
+
+msgid "The DMR ID"
+msgstr "El ID DMR"
+
+msgid "{what} must be a number: «{text}»"
+msgstr "{what} debe ser un número: «{text}»"
+
+msgid "no QSO in the log"
+msgstr "ningún QSO en el registro"
+
+msgid "{count} QSO in the log"
+msgstr "{count} QSO en el registro"
+
+msgid "Address book: /search TEXT looks up callsign, name, city, province, country or DMR ID · /search alone shows everything"
+msgstr "Agenda: /buscar TEXTO busca en indicativo, nombre, ciudad, provincia, país o ID DMR · /buscar solo lo muestra todo"
+
+msgid "Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log"
+msgstr "Enter alta · ↑↓ lista · RePág/AvPág página · /buscar TEXTO · F1 registro"
+
+msgid "/search is for the address book (F3)."
+msgstr "/buscar es para la agenda (F3)."
+
+msgid "Showing everything."
+msgstr "Se muestra todo."
+
+msgid "{count} found for «{text}»."
+msgstr "{count} encontrados para «{text}»."
+
+msgid "SEARCH"
+msgstr "BUSCAR"
+
+msgid "{shown} of {total} · narrow it with /search"
+msgstr "{shown} de {total} · acota con /buscar"
+
+msgid "{total} contacts"
+msgstr "{total} contactos"
+
+msgid "F1 Log · F2 Inventory · F3 Address book · Ctrl+Q Quit"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda · Ctrl+Q Salir"
+
+msgid "F1 Log · F2 Inventory · F3 Address book"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda"
+
+msgid "F1 · F2 · F3"
+msgstr "F1 · F2 · F3"
+
+msgid "d: the address book says «{name}»"
+msgstr "d: en la agenda es «{name}»"

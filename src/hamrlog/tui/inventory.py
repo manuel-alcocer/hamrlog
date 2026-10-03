@@ -67,7 +67,7 @@ class ListSuggester(Suggester):
 
 
 class Kind:
-    """Base for the four tabs."""
+    """Base for one list of a list view: an inventory tab, the address book."""
 
     key: str = ""
     title: str = ""
@@ -79,9 +79,18 @@ class Kind:
     fields: tuple[str, ...] = ()
     #: (heading, width); None takes the remaining width.
     columns: tuple[tuple[str, int | None], ...] = ()
+    #: Boxes of a second row, always shown, for lists with many fields.
+    second_row: tuple[str, ...] = ()
+    #: True when the list is searched with /search rather than shown whole.
+    searchable: bool = False
 
-    def items(self) -> list[Item]:
+    def items(self, query: str = "") -> list[Item]:
+        """The rows to show; ``query`` is the /search text of searchable lists."""
         raise NotImplementedError
+
+    def total(self, query: str = "") -> int:
+        """How many items match ``query``, beyond the ones shown."""
+        return len(self.items(query))
 
     def values(self, item_id: int) -> dict[str, str]:
         """What the entry line shows when editing an item."""
@@ -187,7 +196,7 @@ class EquipmentKind(Kind):
         (N_("NOTES"), None),
     )
 
-    def items(self) -> list[Item]:
+    def items(self, query: str = "") -> list[Item]:
         return [
             Item(
                 equipment.id,
@@ -280,7 +289,7 @@ class StationKind(Kind):
         (N_("NOTES"), None),
     )
 
-    def items(self) -> list[Item]:
+    def items(self, query: str = "") -> list[Item]:
         rows = []
         for station in StationService.list_all():
             power = f"{station.power_w} W" if station.power_w else ""
@@ -365,7 +374,7 @@ class AntennaKind(Kind):
         (N_("NOTES"), None),
     )
 
-    def items(self) -> list[Item]:
+    def items(self, query: str = "") -> list[Item]:
         return [
             Item(
                 antenna.id,
@@ -429,7 +438,7 @@ class SupplyKind(Kind):
         (N_("NOTES"), None),
     )
 
-    def items(self) -> list[Item]:
+    def items(self, query: str = "") -> list[Item]:
         rows = []
         for supply in PowerSupplyService.list_all():
             volts = _format_number(supply.voltage_v, "V")
@@ -485,17 +494,44 @@ class SupplyKind(Kind):
 KINDS: tuple[Kind, ...] = (EquipmentKind(), StationKind(), AntennaKind(), SupplyKind())
 
 
-def tab_bar(active: int, brand: str = "") -> Text:
-    """The row of tab names at the top of the view, the active one marked."""
+def tab_bar(
+    kinds: tuple[Kind, ...],
+    active: int,
+    brand: str = "",
+    query: str = "",
+    shown: int = 0,
+    total: int = 0,
+) -> Text:
+    """The row at the top of a list view.
+
+    The tab names, the active one marked, when the view has several lists;
+    then the brand filter, or the search and how much of it is shown.
+    """
     text = Text(no_wrap=True, overflow="ellipsis")
-    for index, kind in enumerate(KINDS):
-        if index:
-            text.append("  ")
-        if index == active:
-            text.append(f" {_(kind.title)} ", style="bold black on rgb(120,180,255)")
-        else:
-            text.append(f" {_(kind.title)} ", style="bold")
-    if KINDS[active].has_brands:
-        text.append(f"   {_('BRAND')} ", style="dim")
+    if len(kinds) > 1:
+        for index, kind in enumerate(kinds):
+            if index:
+                text.append("  ")
+            if index == active:
+                text.append(f" {_(kind.title)} ", style="bold black on rgb(120,180,255)")
+            else:
+                text.append(f" {_(kind.title)} ", style="bold")
+        text.append("   ")
+    kind = kinds[active]
+    if kind.has_brands:
+        text.append(f"{_('BRAND')} ", style="dim")
         text.append(brand or _("all"), style="bold yellow" if brand else "dim")
+    if kind.searchable:
+        text.append(f"{_('SEARCH')} ", style="dim")
+        text.append(query or "—", style="bold yellow" if query else "dim")
+        text.append("   ")
+        if shown < total:
+            text.append(
+                _("{shown} of {total} · narrow it with /search").format(
+                    shown=shown, total=total
+                ),
+                style="dim",
+            )
+        else:
+            text.append(_("{total} contacts").format(total=total), style="dim")
     return text

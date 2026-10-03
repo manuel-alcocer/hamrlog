@@ -51,9 +51,11 @@ COLUMNS: tuple[tuple[str, int | None], ...] = (
 
 #: Letters of the INFO column, in the order they are written: S for a QSO
 #: selected with Space or Ctrl+A, E for one with an error (so far, a setup
-#: that cannot work its frequency). A selected QSO with an error reads «SE».
+#: that cannot work its frequency), d («drift») for one whose name differs
+#: from the address book's. A selected QSO with an error reads «SE».
 FLAG_SELECTED = "S"
 FLAG_ERROR = "E"
+FLAG_DRIFT = "d"
 
 #: Date and time without seconds. A strftime pattern, translated like any
 #: text: the English order is year first, the Spanish one day first.
@@ -246,6 +248,7 @@ class HistoryPanel(DataTable):
         info = Text.assemble(
             (FLAG_SELECTED if row.id in self.marked else "", "bold cyan"),
             (FLAG_ERROR if row.equipment_mismatch else "", "bold red"),
+            (FLAG_DRIFT if row.name_drift else "", "bold yellow"),
         )
         return [
             info,

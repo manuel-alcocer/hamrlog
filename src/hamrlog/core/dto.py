@@ -42,6 +42,10 @@ class QsoRow:
     equipment_name: str = ""
     #: True when the set cannot work the QSO's frequency or band.
     equipment_mismatch: bool = False
+    #: Name the address book has for the station, empty when none.
+    book_name: str = ""
+    #: True when the QSO's name differs from the address book's («drift»).
+    name_drift: bool = False
 
     @property
     def is_manual(self) -> bool:

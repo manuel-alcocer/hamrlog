@@ -106,6 +106,22 @@ def _(message: str) -> str:
     return (_catalog or {}).get(message) or message
 
 
+def untranslate(text: str) -> str:
+    """The English text whose translation is ``text``, ignoring case.
+
+    For values the operator types in their language but the program stores
+    in English, such as a country: «españa» gives "Spain". Text with no such
+    translation comes back as it was.
+    """
+    if _catalog is None:
+        set_language()
+    needle = text.strip().lower()
+    for msgid, msgstr in (_catalog or {}).items():
+        if msgstr.lower() == needle:
+            return msgid
+    return text.strip()
+
+
 def N_(message: str) -> str:  # noqa: N802 - the gettext convention
     """Mark a string for translation without translating it yet."""
     return message

@@ -75,6 +75,14 @@ FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
     "supplies": (N_("SUPPLIES"), 16),
     # Equipment set of a logged QSO, offered only while editing it.
     "equipment": (N_("SETUP"), 22),
+    # Address book view (F3).
+    "first_name": (N_("NAME"), 14),
+    "last_name": (N_("SURNAME"), 16),
+    "dmr_id": (N_("DMR ID"), 9),
+    "city": (N_("CITY"), 14),
+    "state": (N_("PROVINCE"), 14),
+    "country": (N_("COUNTRY"), 14),
+    "email": (N_("EMAIL"), 22),
     "notes": (N_("NOTES"), None),
 }
 
@@ -185,6 +193,8 @@ class EntryPanel(Vertical):
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._field_order: tuple[str, ...] = ()
         self._extra_fields: tuple[str, ...] = EDIT_EXTRA_FIELDS
+        #: Boxes of a second row that is always part of the form.
+        self._second_fields: tuple[str, ...] = ()
         #: Help line replacing the log's when another view owns the line.
         self._base_keys = ""
         #: Help line while editing; each view sets its own.
@@ -204,6 +214,7 @@ class EntryPanel(Vertical):
 
     def compose(self) -> ComposeResult:
         yield Horizontal(id="entry-fields")
+        yield Horizontal(id="entry-second")
         yield Horizontal(id="entry-extra")
         yield BrowseBar(id="entry-browse")
         yield Static("", id="entry-hint")
@@ -212,6 +223,7 @@ class EntryPanel(Vertical):
     def on_mount(self) -> None:
         self.query_one("#entry-browse", BrowseBar).display = False
         self.query_one("#entry-extra", Horizontal).display = False
+        self.query_one("#entry-second", Horizontal).display = False
 
     # -------------------------------------------------------------- fields --
     @property
@@ -242,24 +254,31 @@ class EntryPanel(Vertical):
         return self._editing
 
     def build_fields(
-        self, field_order: tuple[str, ...], extra: tuple[str, ...] = EDIT_EXTRA_FIELDS
+        self,
+        field_order: tuple[str, ...],
+        extra: tuple[str, ...] = EDIT_EXTRA_FIELDS,
+        second: tuple[str, ...] = (),
     ) -> None:
         """Lay out one box per field of the active profile.
 
         Rebuilt only when the order actually changes, so a status refresh does
-        not throw away what is being typed. ``extra`` lists the boxes of the
-        second row, offered only while editing.
+        not throw away what is being typed. ``extra`` lists the boxes of a
+        row offered only while editing; ``second`` those of a row that is
+        always part of the form, for lists with more fields than fit in one.
         """
-        if field_order == self._field_order and extra == self._extra_fields:
+        if (field_order, extra, second) == (
+            self._field_order, self._extra_fields, self._second_fields
+        ):
             return
         self._field_order = field_order
         self._extra_fields = extra
+        self._second_fields = second
         # Removing is asynchronous, so the new boxes must wait for the old
         # ones to go or their ids would collide. Chained, so two rebuilds in a
         # row never interleave.
         previous = self._pending_mount
         self._pending_mount = asyncio.ensure_future(
-            self._rebuild_after(previous, field_order, extra)
+            self._rebuild_after(previous, field_order, extra, second)
         )
 
     async def _rebuild_after(
@@ -267,10 +286,11 @@ class EntryPanel(Vertical):
         previous: asyncio.Task[None] | None,
         field_order: tuple[str, ...],
         extra: tuple[str, ...],
+        second: tuple[str, ...] = (),
     ) -> None:
         if previous is not None:
             await previous
-        await self._rebuild(field_order, extra)
+        await self._rebuild(field_order, extra, second)
 
     def set_suggesters(self, suggesters: dict[str, object]) -> None:
         """Inline completions per box; boxes not named get none."""
@@ -278,7 +298,10 @@ class EntryPanel(Vertical):
             box.suggester = suggesters.get(box.field_name)  # type: ignore[assignment]
 
     async def _rebuild(
-        self, field_order: tuple[str, ...], extra: tuple[str, ...] = EDIT_EXTRA_FIELDS
+        self,
+        field_order: tuple[str, ...],
+        extra: tuple[str, ...] = EDIT_EXTRA_FIELDS,
+        second: tuple[str, ...] = (),
     ) -> None:
         """Replace the boxes with one per field, in order.
 
@@ -287,11 +310,15 @@ class EntryPanel(Vertical):
         application focuses the form when it means to.
         """
         row = self.query_one("#entry-fields", Horizontal)
+        second_row = self.query_one("#entry-second", Horizontal)
         extra_row = self.query_one("#entry-extra", Horizontal)
         await row.remove_children()
+        await second_row.remove_children()
         await extra_row.remove_children()
 
         await row.mount_all(self._boxes(field_order))
+        await second_row.mount_all(self._boxes(second))
+        second_row.display = bool(second) and row.display
         await extra_row.mount_all(
             self._boxes(
                 tuple(name for name in extra if name not in field_order),
@@ -373,11 +400,13 @@ class EntryPanel(Vertical):
         if browsing:
             self._draft = self.values()
             form.display = False
+            self._show_second(False)
             bar.display = True
             bar.focus()
         else:
             bar.display = False
             form.display = True
+            self._show_second(True)
             for box in self.fields:
                 box.value = self._draft.get(box.field_name, "")
             self._draft = {}
@@ -401,6 +430,7 @@ class EntryPanel(Vertical):
         main.display = not bulk or any(
             box.field_name in BULK_FIELDS for box in main.query(EntryField)
         )
+        self._show_second(not bulk)
         for box in self.query(EntryField):
             box.disabled = bulk and box.field_name not in BULK_FIELDS
         for box in self.fields:
@@ -414,6 +444,7 @@ class EntryPanel(Vertical):
             return
         self._leave_edit()
         self.query_one("#entry-fields", Horizontal).display = False
+        self._show_second(False)
         bar = self.query_one("#entry-browse", BrowseBar)
         bar.display = True
         bar.focus()
@@ -436,8 +467,14 @@ class EntryPanel(Vertical):
         self._draft = {}
         self.query_one("#entry-browse", BrowseBar).display = False
         self.query_one("#entry-fields", Horizontal).display = True
+        self._show_second(True)
         for box in self.query(EntryField):
             box.value = ""
+
+    def _show_second(self, visible: bool) -> None:
+        """Show the always-on second row along with the form, if there is one."""
+        row = self.query_one("#entry-second", Horizontal)
+        row.display = visible and bool(self._second_fields)
 
     @property
     def pending_values(self) -> dict[str, str]:

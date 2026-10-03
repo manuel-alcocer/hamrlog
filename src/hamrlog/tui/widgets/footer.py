@@ -13,7 +13,10 @@ from ...i18n import N_, _
 
 #: Shown at the right edge, so the menus and the way out stay discoverable.
 #: Translated where it is drawn.
-HELP_HINT = N_("F1 Log · F2 Inventory · Ctrl+Q Quit")
+HELP_HINT = N_("F1 Log · F2 Inventory · F3 Address book · Ctrl+Q Quit")
+
+#: What is left of it when the terminal cannot hold the whole hint.
+SHORT_HINTS = (N_("F1 Log · F2 Inventory · F3 Address book"), N_("F1 · F2 · F3"))
 
 
 class StatsFooter(Static):
@@ -52,15 +55,16 @@ class StatsFooter(Static):
                     " ".join(f"{band}:{count}" for band, count in top), style="dim yellow"
                 )
 
-        # Pad so the hint sits flush against the right edge, dropping it
-        # entirely when the terminal is too narrow to hold both.
-        hint = _(HELP_HINT)
+        # Pad so the hint sits flush against the right edge. On a narrow
+        # terminal it gets shorter, and only goes when even that does not fit.
         width = self.size.width
-        padding = width - text.cell_len - len(hint) - 1
-        if width and padding >= 2:
-            text.append(" " * padding)
-            text.append(hint, style="dim")
-            text.append(" ")
+        for hint in (_(HELP_HINT), *(_(short) for short in SHORT_HINTS)):
+            padding = width - text.cell_len - len(hint) - 1
+            if width and padding >= 2:
+                text.append(" " * padding)
+                text.append(hint, style="dim")
+                text.append(" ")
+                break
         return text
 
     def on_resize(self) -> None:

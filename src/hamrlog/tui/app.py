@@ -32,6 +32,7 @@ from ..core.services import (
 from ..core.state import SessionState
 from ..db.session import init_engine
 from ..i18n import N_, _
+from .address_book import CONTACT_KINDS
 from .inventory import KINDS, Item, Kind, ListSuggester, tab_bar
 from .screens.base import ConfirmScreen, Field, FormScreen
 from .widgets.detail import DetailPanel
@@ -64,6 +65,7 @@ COMMANDS: dict[str, str] = {
     "directo": "direct", "simplex": "direct",
     "deshacer": "undo", "undo": "undo", "borrar": "undo", "delete": "undo",
     "marca": "brand", "brand": "brand",
+    "buscar": "search", "search": "search", "find": "search",
     "salir": "quit", "quit": "quit", "exit": "quit",
 }
 
@@ -82,6 +84,22 @@ INVENTORY_EDIT_KEYS = N_("Editing · Tab next field · Enter saves · Esc cancel
 
 #: Action bar over an item of the inventory view.
 INVENTORY_BROWSE = N_("D delete · E edit · ↓ back to typing")
+
+#: ``/help`` and the help line of the address book view.
+CONTACTS_SUMMARY = N_(
+    "Address book: /search TEXT looks up callsign, name, city, province, country "
+    "or DMR ID · /search alone shows everything"
+)
+CONTACTS_KEYS = N_("Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log")
+
+#: The lists each list view shows, its title, and its help lines.
+LIST_VIEWS: dict[str, tuple[tuple[Kind, ...], str, str, str]] = {
+    "inventory": (KINDS, N_("Inventory"), INVENTORY_KEYS, INVENTORY_SUMMARY),
+    "contacts": (CONTACT_KINDS, N_("Address book"), CONTACTS_KEYS, CONTACTS_SUMMARY),
+}
+
+#: The function key that opens each list view from the log.
+VIEW_KEYS: dict[str, str] = {"f2": "inventory", "f3": "contacts"}
 
 #: Shown when a command that needs a value is typed without one.
 COMMAND_USAGE: dict[str, str] = {
@@ -146,10 +164,12 @@ class HamrlogApp(App[None]):
         self._editing_id: int | None = None
         #: The QSOs an edit of several at once applies to; empty otherwise.
         self._bulk_ids: list[int] = []
-        #: "log" or "inventory": what the main frame and the entry line serve.
+        #: "log" or a LIST_VIEWS key: what the main frame and the entry line serve.
         self._view = "log"
-        #: Active tab of the inventory view, an index into KINDS.
-        self._tab = 0
+        #: Active list of each list view, an index into its kinds.
+        self._tabs: dict[str, int] = dict.fromkeys(LIST_VIEWS, 0)
+        #: /search text of each searchable list, by kind key.
+        self._queries: dict[str, str] = {}
         #: Brand filter per tab key; empty shows every brand.
         self._brands: dict[str, str] = {}
         #: Half-typed entries per view, so switching never loses one.
@@ -343,7 +363,7 @@ class HamrlogApp(App[None]):
         if self._editing_id is not None:
             # The form holds that row's values: moving away would orphan them.
             return
-        if self._view == "inventory":
+        if self._view in LIST_VIEWS:
             self.query_one(ItemTable).move_selection(event.delta)
             return
         self.query_one(HistoryPanel).move_selection(event.delta)
@@ -468,7 +488,7 @@ class HamrlogApp(App[None]):
         history = self.query_one(HistoryPanel)
         values = panel.values()
 
-        if self._view == "inventory" and not entry_parser.is_command(panel.first_value):
+        if self._view in LIST_VIEWS and not entry_parser.is_command(panel.first_value):
             if self._editing_id is not None:
                 self._save_item(self._editing_id, values)
             elif any(values.values()):
@@ -541,6 +561,10 @@ class HamrlogApp(App[None]):
             message += f" · {_(row.country)}"
         if not was_known:
             message += _(" · new in the address book")
+        if row.name_drift:
+            message += " · " + _("d: the address book says «{name}»").format(
+                name=row.book_name
+            )
         if parsed.warnings:
             panel.feedback(f"{message}   ⚠ {' '.join(parsed.warnings)}", "warning")
         else:
@@ -562,11 +586,15 @@ class HamrlogApp(App[None]):
 
         if action == "help":
             panel.feedback(
-                _(INVENTORY_SUMMARY if self._view == "inventory" else COMMAND_SUMMARY), "info"
+                _(LIST_VIEWS[self._view][3] if self._view in LIST_VIEWS else COMMAND_SUMMARY),
+                "info",
             )
             return
         if action == "brand":
             self._filter_brand(command.argument)
+            return
+        if action == "search":
+            self._search(command.argument)
             return
         if action in COMMAND_USAGE and not command.argument:
             panel.feedback(_(COMMAND_USAGE[action]), "info")
@@ -759,7 +787,7 @@ class HamrlogApp(App[None]):
             self._end_edit()
             self.query_one(EntryPanel).feedback(_("Edit cancelled."), "info")
             return
-        if self._view == "inventory":
+        if self._view in LIST_VIEWS:
             table = self.query_one(ItemTable)
             if not table.on_insert_row:
                 table.go_to_insert_row()
@@ -769,7 +797,7 @@ class HamrlogApp(App[None]):
     @on(BrowseBar.Action)
     def _on_browse_action(self, event: BrowseBar.Action) -> None:
         """D, E and R act on the QSO the cursor is sitting on."""
-        if self._view == "inventory":
+        if self._view in LIST_VIEWS:
             self._on_item_action(event.action)
             return
         history = self.query_one(HistoryPanel)
@@ -913,7 +941,7 @@ class HamrlogApp(App[None]):
     @on(BrowseBar.UnknownKey)
     def _on_unknown_browse_key(self) -> None:
         """Remind the operator that the line is not a text field right now."""
-        if self._view == "inventory":
+        if self._view in LIST_VIEWS:
             self.query_one(EntryPanel).feedback(
                 _("You are on an item of the list: {keys}").format(keys=_(INVENTORY_BROWSE)),
                 "warning",
@@ -1100,7 +1128,7 @@ class HamrlogApp(App[None]):
         """
         if self._modal_open:
             return
-        if self._view == "inventory":
+        if self._view in LIST_VIEWS:
             self._on_item_action("delete")
             return
         history = self.query_one(HistoryPanel)
@@ -1148,8 +1176,16 @@ class HamrlogApp(App[None]):
 
     # ---------------------------------------------------------- equipment --
     @property
+    def _kinds(self) -> tuple[Kind, ...]:
+        return LIST_VIEWS[self._view][0]
+
+    @property
+    def _tab(self) -> int:
+        return self._tabs.get(self._view, 0)
+
+    @property
     def _kind(self) -> Kind:
-        return KINDS[self._tab]
+        return self._kinds[self._tab]
 
     def _draft_key(self) -> str:
         return "log" if self._view == "log" else self._kind.key
@@ -1174,13 +1210,16 @@ class HamrlogApp(App[None]):
                 self._page(-1 if key == "pageup" else 1)
             return
         if self._view == "log":
-            if key == "f2":
-                await self._show_view("inventory")
+            if key in VIEW_KEYS:
+                await self._show_view(VIEW_KEYS[key])
+            return
+        tabs = len(self._kinds)
+        if tabs < 2:
             return
         if key in ("f5", "shift+pageup"):
-            await self._show_view("inventory", (self._tab - 1) % len(KINDS))
+            await self._show_view(self._view, (self._tab - 1) % tabs)
         elif key in ("f6", "shift+pagedown"):
-            await self._show_view("inventory", (self._tab + 1) % len(KINDS))
+            await self._show_view(self._view, (self._tab + 1) % tabs)
 
     def _page(self, direction: int) -> None:
         """Move the cursor of the list in view by as many rows as it shows."""
@@ -1207,12 +1246,12 @@ class HamrlogApp(App[None]):
 
         self._view = view
         if tab is not None:
-            self._tab = tab
+            self._tabs[view] = tab
         in_log = view == "log"
         self.query_one(HistoryPanel).display = in_log
         self.query_one(InventoryView).display = not in_log
         self.query_one("#log-frame", Vertical).border_title = (
-            _("Log") if in_log else _("Inventory")
+            _("Log") if in_log else _(LIST_VIEWS[view][1])
         )
 
         if in_log:
@@ -1222,26 +1261,49 @@ class HamrlogApp(App[None]):
             panel.set_base_keys("")
             self._refresh_detail(None)
         else:
-            panel.build_fields(self._kind.fields, extra=())
+            panel.build_fields(self._kind.fields, extra=(), second=self._kind.second_row)
             panel.set_browse_prompt(INVENTORY_BROWSE)
             panel.edit_keys = INVENTORY_EDIT_KEYS
-            panel.set_base_keys(INVENTORY_KEYS)
+            panel.set_base_keys(LIST_VIEWS[view][2])
             self._reload_items()
         await panel.ready()
         panel.set_suggesters({} if in_log else self._kind.suggesters())
         panel.set_values(self._drafts.get(self._draft_key(), {}))
         panel.feedback("")
         if in_log:
-            self.query_one(HistoryPanel).go_to_insert_row()
+            # Other views change what the rows show: a contact's name decides
+            # the d flag, a setup's name and parts the setup column and E.
+            # Reloading leaves the cursor on the insert row.
+            self._reload_history()
 
     def _reload_items(self, keep_id: int | None = None) -> None:
         kind = self._kind
-        items = kind.items()
+        query = self._queries.get(kind.key, "")
+        items = kind.items(query)
         brand = self._brands.get(kind.key, "")
         if brand:
             items = [item for item in items if item.brand.lower() == brand.lower()]
-        self.query_one(InventoryView).set_tabs(tab_bar(self._tab, brand))
+        total = kind.total(query) if kind.searchable else len(items)
+        self.query_one(InventoryView).set_tabs(
+            tab_bar(self._kinds, self._tab, brand, query, len(items), total)
+        )
         self.query_one(ItemTable).show(kind, items, keep_id)
+
+    def _search(self, text: str) -> None:
+        """``/search TEXT``: narrow a searchable list; alone, show all of it."""
+        panel = self.query_one(EntryPanel)
+        if self._view not in LIST_VIEWS or not self._kind.searchable:
+            panel.feedback(_("/search is for the address book (F3)."), "warning")
+            return
+        self._queries[self._kind.key] = text.strip()
+        self._reload_items()
+        table = self.query_one(ItemTable)
+        panel.feedback(
+            _("{count} found for «{text}».").format(count=table.item_count, text=text.strip())
+            if text.strip()
+            else _("Showing everything."),
+            "info",
+        )
 
     @on(ItemTable.SelectionChanged)
     def _on_item_selection(self, event: ItemTable.SelectionChanged) -> None:

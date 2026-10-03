@@ -54,6 +54,12 @@ class DetailPanel(Static):
                 _chunk(third, _("E: the frequency does not fit this setup"), "bold red")
         elif row.station_name:
             _chunk(third, row.station_name)
+        if row.name_drift:
+            _chunk(
+                third,
+                _("d: the address book says «{name}»").format(name=row.book_name),
+                "bold yellow",
+            )
         digital = modes.status_summary(row.digital_data or {}, has_repeater=bool(row.repeater_call))
         if digital:
             _chunk(third, digital, "magenta")

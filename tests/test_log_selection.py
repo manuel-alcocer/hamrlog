@@ -170,3 +170,77 @@ async def test_a_selected_qso_with_an_error_reads_se(operator):
         await pilot.press("up", "space")
         await pilot.pause()
         assert info(app, ids[-1]) == "SE"
+
+
+async def test_a_name_that_differs_from_the_book_is_flagged_d(operator):
+    from hamrlog.core.services import ContactService
+
+    ContactService.create("EA7LFZ", first_name="Luis", last_name="Gómez")
+    state = SessionState(operator_id=operator.id)
+    state.set_band("40m")
+    same = QsoService.log({"call": "EA7LFZ", "name": "luis"}, state)
+    full = QsoService.log({"call": "EA7LFZ", "name": "Luis Gómez"}, state)
+    other = QsoService.log({"call": "EA7LFZ/P", "name": "Pepe"}, state)
+    unnamed = QsoService.log({"call": "EA7LFZ"}, state)
+    stranger = QsoService.log({"call": "EA1ZZZ", "name": "Ana"}, state)
+    assert [QsoService.get(r.id).name_drift for r in (same, full, other, unnamed)] == [
+        False, False, True, False
+    ]
+    # Not in the book (or added by this very QSO): nothing to differ from.
+    assert not QsoService.get(stranger.id).name_drift
+    assert QsoService.get(other.id).book_name == "Luis Gómez"
+
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause()
+        assert info(app, other.id) == "d"
+        assert info(app, same.id) == ""
+        history = app.query_one(HistoryPanel)
+        while history.selected_qso_id() != other.id:
+            await pilot.press("up")
+            await pilot.pause()
+        assert "en la agenda es «Luis Gómez»" in str(app.query_one("#detail").render())
+
+
+async def test_logging_a_different_name_says_so(operator):
+    from hamrlog.core.services import ContactService
+
+    ContactService.create("EA7LFZ", first_name="Luis")
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause()
+        app.query_one(EntryPanel).set_values({"call": "ea7lfz", "name": "Pepe"})
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "en la agenda es «Luis»" in feedback(app)
+        row = QsoService.recent()[-1]
+        assert info(app, row.id) == "d"
+        # The book keeps its own name.
+        assert ContactService.lookup("EA7LFZ").first_name == "Luis"
+
+
+async def test_fixing_the_contact_clears_the_d_on_return_to_the_log(operator):
+    """The log rows are rebuilt when coming back from another view."""
+    from hamrlog.core.services import ContactService
+
+    ContactService.create("EA7LFZ", first_name="Jose")
+    state = SessionState(operator_id=operator.id)
+    state.set_band("40m")
+    row = QsoService.log({"call": "EA7LFZ", "name": "Jose Manuel"}, state)
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause()
+        assert info(app, row.id) == "d"
+        await pilot.press("f3")
+        await pilot.pause()
+        await pilot.pause()
+        await pilot.press("up", "e")
+        await pilot.pause()
+        app.query_one("#entry-last_name").value = "Manuel"
+        await pilot.press("enter")
+        await pilot.pause()
+        await pilot.press("f1")
+        await pilot.pause()
+        await pilot.pause()
+        assert info(app, row.id) == ""
+        assert app.query_one(HistoryPanel).on_insert_row

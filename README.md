@@ -157,8 +157,11 @@ detalle explica por qué.
 
 La lista del registro muestra INFO, fecha y hora, indicativo, nombre,
 frecuencia, modo, equipo, país y QTH. INFO lleva una letra por cada cosa que
-señalar: `S` si el QSO está seleccionado, `E` si tiene un error (un QSO
-seleccionado y con error dice `SE`); vacía si no hay nada. La fecha va sin
+señalar: `S` si el QSO está seleccionado, `E` si tiene un error, `d` (*drift*)
+si el nombre del QSO no coincide con el de la ficha de la agenda (un QSO
+seleccionado y con error dice `SE`); vacía si no hay nada. El nombre coincide
+si es el nombre o el nombre completo de la ficha, sin mirar mayúsculas; el
+detalle dice cuál tiene la agenda, y la ficha no se cambia. La fecha va sin
 segundos: `DD/MM/AA HH:MM` en español y `AA/MM/DD HH:MM` en inglés.
 
 Repetir se guarda con la banda y el modo actuales, no con los de entonces:
@@ -224,6 +227,7 @@ quién es.
 | `Esc` | Vuelve a `<Insertar nuevo>` |
 | `F1` | **Registro**, desde cualquier ventana |
 | `F2` | **Inventario** |
+| `F3` | **Agenda** de contactos |
 | `RePág` `AvPág` | Recorren el histórico página a página |
 | `Ctrl+Q` | Salir |
 
@@ -273,6 +277,27 @@ salen atenuados: **no se modifican ni se borran**, solo se usan al montar un
 equipo. Para añadir un catálogo basta con dejar otro `.json` en esa carpeta,
 con la forma `{"tipo": "emisoras" | "antenas" | "fuentes", "elementos": [...]}`.
 
+### Agenda (`F3`)
+
+`F3` muestra la agenda en el recuadro del registro, igual que el Inventario:
+la lista arriba, `<Nuevo contacto>` al final, `D` y `E` sobre una ficha, y la
+línea de entrada para escribir. Como una ficha tiene muchos datos, la línea
+de entrada tiene aquí dos filas:
+
+```
+ IND  EA4ABC       NOMBRE  Juan          APELLIDOS  Pérez García    ID DMR  2141234  LOC  IN80
+ CIUDAD  Madrid        PROVINCIA  Madrid        PAÍS  España        CORREO                NOTAS
+```
+
+El país se escribe en tu idioma y se guarda en inglés, como en el registro.
+El detalle de cada ficha dice cuántos QSO tienes con esa estación.
+
+Una lista de usuarios DMR puede traer decenas de miles de fichas, así que la
+agenda enseña como mucho 500 a la vez: `/buscar texto` busca en indicativo,
+nombre, ciudad, provincia, país o ID DMR, y `/buscar` solo vuelve a todas.
+La cabecera dice cuántas hay y cuántas se ven. `RePág` y `AvPág` pasan
+página.
+
 ### Idioma
 
 La interfaz está en inglés y en español. Se elige sola según el idioma del
@@ -304,8 +329,7 @@ diálogos: la confirmación de un borrado y los datos de un modo digital.
 
 Las pantallas de gestión se han retirado para rediseñarlas. Los datos y la
 lógica siguen en la base de datos y en `core/services.py`, pero desde la
-aplicación **no se puede**, de momento: consultar
-o editar la agenda, elegir con qué equipo trabajas, dar de alta repetidores o
+aplicación **no se puede**, de momento: elegir con qué equipo trabajas, dar de alta repetidores o
 configuraciones, cambiar de operador ni tocar los ajustes (unidades, orden del
 histórico, validación de indicativos, métricas). Importar y exportar sigue
 disponible [desde la línea de órdenes](#desde-la-línea-de-órdenes).
@@ -338,8 +362,9 @@ correo y notas de cada indicativo. Se consulta con `hamrlog contacts list`.
 **Se llena sola con lo que trabajas**: al registrar un indicativo que no esté
 en ella, se da de alta con el nombre, el QTH y el país del propio QSO. Los que
 ya están no se tocan —lo que hayas escrito ahí vale más que lo que traiga un
-contacto suelto—, salvo que su ficha no tenga nombre: entonces toma el que
-escribas al registrar. Las portables (`F/EA4ABC/P`) se archivan bajo el indicativo
+contacto suelto—, salvo lo que le falte: si la ficha no tiene nombre toma el
+que escribas al registrar, y si no tiene ciudad toma el QTH. Los QSO
+anteriores con esa estación no se tocan. Las portables (`F/EA4ABC/P`) se archivan bajo el indicativo
 de casa, así que no se duplican.
 
 De vuelta, al teclear un indicativo conocido aparece quién es bajo la línea de

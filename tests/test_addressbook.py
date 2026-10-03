@@ -353,3 +353,35 @@ def test_importing_adif_does_not_flood_the_book(tmp_path, state):
     transfer.import_adif(path, operator_id=other.id, respect_file_operator=False)
 
     assert ContactService.count() == before
+
+
+def test_logging_fills_what_the_book_entry_lacks_and_nothing_else(state):
+    """Name and QTH heard on air complete an entry that has none."""
+    from hamrlog.core.services import ContactService, QsoService
+
+    state.autofill_from_book = False
+    first = QsoService.log({"call": "EA7LFZ"}, state)
+    entry = ContactService.lookup("EA7LFZ")
+    assert (entry.first_name, entry.city) == ("", "")
+
+    QsoService.log({"call": "EA7LFZ", "name": "Luis", "qth": "Cádiz"}, state)
+    entry = ContactService.lookup("EA7LFZ")
+    assert (entry.first_name, entry.city) == ("Luis", "Cádiz")
+    # The earlier QSO is left as it was logged.
+    earlier = QsoService.get(first.id)
+    assert (earlier.name, earlier.qth) == ("", "")
+
+    # What the book already has is not replaced by a later QSO.
+    QsoService.log({"call": "EA7LFZ/P", "name": "Otro", "qth": "Jerez"}, state)
+    entry = ContactService.lookup("EA7LFZ")
+    assert (entry.first_name, entry.city) == ("Luis", "Cádiz")
+
+
+def test_an_entry_with_a_name_still_takes_a_missing_qth(state):
+    from hamrlog.core.services import ContactService, QsoService
+
+    ContactService.create("EA7LFZ", first_name="Luis", source="import")
+    state.autofill_from_book = False
+    QsoService.log({"call": "EA7LFZ", "name": "Luisito", "qth": "Cádiz"}, state)
+    entry = ContactService.lookup("EA7LFZ")
+    assert (entry.first_name, entry.city) == ("Luis", "Cádiz")

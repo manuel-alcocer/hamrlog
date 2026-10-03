@@ -1190,8 +1190,44 @@ _EQUIPMENT_LOAD = (
 )
 
 
-def _to_row(qso: Qso) -> QsoRow:
-    """Convert an eagerly loaded QSO into the UI/API shape."""
+def _book_names(session: Any, qsos: list[Qso]) -> dict[str, tuple[str, str]]:
+    """First and full name in the address book of each station, one query."""
+    calls = {qso.base_call for qso in qsos if qso.base_call}
+    if not calls:
+        return {}
+    rows = session.execute(
+        select(Contact.base_call, Contact.first_name, Contact.last_name).where(
+            Contact.base_call.in_(calls)
+        )
+    ).all()
+    return {base: (first, f"{first} {last}".strip()) for base, first, last in rows}
+
+
+def _name_drifts(name: str, book: tuple[str, str] | None) -> bool:
+    """Whether a QSO's name disagrees with the address book.
+
+    It agrees with the first name or the full one, ignoring case and extra
+    spaces; a QSO without a name, or a station the book has no name for, has
+    nothing to disagree with.
+    """
+    heard = " ".join(name.split()).casefold()
+    if not heard or book is None or not any(book):
+        return False
+    return heard not in {part.casefold() for part in book}
+
+
+def _to_rows(session: Any, qsos: list[Qso]) -> list[QsoRow]:
+    book = _book_names(session, qsos)
+    return [_to_row(qso, book) for qso in qsos]
+
+
+def _to_row(qso: Qso, book: dict[str, tuple[str, str]] | None = None) -> QsoRow:
+    """Convert an eagerly loaded QSO into the UI/API shape.
+
+    ``book`` holds the address book names of the stations, from
+    _book_names(); without it the QSO is not compared with the book.
+    """
+    names = (book or {}).get(qso.base_call)
     return QsoRow(
         id=qso.id,
         call=qso.call,
@@ -1217,6 +1253,8 @@ def _to_row(qso: Qso) -> QsoRow:
         equipment_mismatch=(
             qso.equipment is not None and not qso.equipment.fits(qso.freq_hz, qso.band)
         ),
+        book_name=names[1] if names else "",
+        name_drift=_name_drifts(qso.name, names),
     )
 
 
@@ -1251,10 +1289,12 @@ def _remember_in_address_book(row: QsoRow) -> None:
     """Add a station to the address book the first time it is worked.
 
     An entry already there keeps what it has, since what the operator typed
-    into it is worth more than what a single QSO happens to carry; the one
-    exception is an entry with no name at all, which takes the name heard on
-    air. The entry is filed under the home callsign, so working the same
-    person portable does not produce a second one.
+    into it is worth more than what a single QSO happens to carry. What it
+    lacks, it takes from the QSO: a name when it has none, the QTH as its city
+    when it has none. Only the address book changes: earlier QSOs with the
+    station are left exactly as they were logged. The entry is filed under
+    the home callsign, so working the same person portable does not produce a
+    second one.
 
     A failure here must never cost the operator the QSO, so it is swallowed.
     """
@@ -1265,10 +1305,13 @@ def _remember_in_address_book(row: QsoRow) -> None:
     try:
         known = ContactService.lookup(base)
         if known is not None:
+            missing: dict[str, Any] = {}
             if row.name and not (known.first_name or known.last_name):
-                ContactService.update(
-                    known.id, first_name=first_name, last_name=last_name.strip()
-                )
+                missing.update(first_name=first_name, last_name=last_name.strip())
+            if row.qth and not known.city:
+                missing["city"] = row.qth
+            if missing:
+                ContactService.update(known.id, **missing)
             return
         ContactService.create(
             base,
@@ -1377,7 +1420,7 @@ class QsoService:
                 )
                 .where(Qso.id == qso.id)
             ).one()
-            row = _to_row(loaded)
+            row = _to_rows(session, [loaded])[0]
 
         if state.add_to_book:
             _remember_in_address_book(row)
@@ -1402,7 +1445,7 @@ class QsoService:
             if operator_id is not None:
                 stmt = stmt.where(Qso.operator_id == operator_id)
             rows = list(session.scalars(stmt))
-            return [_to_row(qso) for qso in reversed(rows)]
+            return _to_rows(session, list(reversed(rows)))
 
     @staticmethod
     def search(
@@ -1445,7 +1488,7 @@ class QsoService:
                 stmt = stmt.where(Qso.mode == mode)
             if operator_id is not None:
                 stmt = stmt.where(Qso.operator_id == operator_id)
-            return [_to_row(qso) for qso in session.scalars(stmt)]
+            return _to_rows(session, list(session.scalars(stmt)))
 
     @staticmethod
     def get(qso_id: int) -> QsoRow | None:
@@ -1461,7 +1504,7 @@ class QsoService:
                 )
                 .where(Qso.id == qso_id)
             ).first()
-            return _to_row(qso) if qso else None
+            return _to_rows(session, [qso])[0] if qso else None
 
     @staticmethod
     def editable_fields(qso_id: int) -> frozenset[str]:
@@ -1539,7 +1582,7 @@ class QsoService:
                 )
                 .where(Qso.id == qso.id)
             ).one()
-            return _to_row(loaded)
+            return _to_rows(session, [loaded])[0]
 
     @staticmethod
     def delete(qso_id: int) -> None:
@@ -1581,7 +1624,7 @@ class QsoService:
                     minutes=within_minutes
                 )
                 stmt = stmt.where(Qso.qso_utc >= since)
-            return [_to_row(qso) for qso in session.scalars(stmt)]
+            return _to_rows(session, list(session.scalars(stmt)))
 
     @staticmethod
     def stats(operator_id: int | None = None) -> LogStats:
@@ -1653,6 +1696,25 @@ def _contact_to_row(contact: Contact, qso_count: int = 0) -> ContactRow:
     )
 
 
+def _contact_filter(text: str) -> Any:
+    """The search condition for the address book, None for no search."""
+    needle = text.strip()
+    if not needle:
+        return None
+    pattern = f"%{needle}%"
+    conditions = [
+        Contact.callsign.ilike(pattern),
+        Contact.first_name.ilike(pattern),
+        Contact.last_name.ilike(pattern),
+        Contact.city.ilike(pattern),
+        Contact.state.ilike(pattern),
+        Contact.country.ilike(pattern),
+    ]
+    if needle.isdigit():
+        conditions.append(Contact.dmr_id == int(needle))
+    return or_(*conditions)
+
+
 class ContactService:
     """The address book.
 
@@ -1696,24 +1758,14 @@ class ContactService:
 
     @staticmethod
     def search(text: str = "", *, limit: int = 500, with_counts: bool = True) -> list[ContactRow]:
-        """Search by callsign, name, city, country or DMR ID."""
+        """Search by callsign, name, city, province, country or DMR ID."""
         with session_scope() as session:
             stmt = select(Contact).order_by(
                 Contact.is_favorite.desc(), Contact.callsign
             ).limit(limit)
-            needle = text.strip()
-            if needle:
-                pattern = f"%{needle}%"
-                conditions = [
-                    Contact.callsign.ilike(pattern),
-                    Contact.first_name.ilike(pattern),
-                    Contact.last_name.ilike(pattern),
-                    Contact.city.ilike(pattern),
-                    Contact.country.ilike(pattern),
-                ]
-                if needle.isdigit():
-                    conditions.append(Contact.dmr_id == int(needle))
-                stmt = stmt.where(or_(*conditions))
+            condition = _contact_filter(text)
+            if condition is not None:
+                stmt = stmt.where(condition)
             contacts = list(session.scalars(stmt))
 
             counts: dict[str, int] = {}
@@ -1734,9 +1786,14 @@ class ContactService:
             ]
 
     @staticmethod
-    def count() -> int:
+    def count(text: str = "") -> int:
+        """How many entries there are, or match ``text`` as search() does."""
         with session_scope() as session:
-            return session.scalar(select(func.count(Contact.id))) or 0
+            stmt = select(func.count(Contact.id))
+            condition = _contact_filter(text)
+            if condition is not None:
+                stmt = stmt.where(condition)
+            return session.scalar(stmt) or 0
 
     @staticmethod
     def create(
@@ -1797,8 +1854,33 @@ class ContactService:
             if contact is None:
                 raise ServiceError(_("Contact not found in the address book."))
             if "callsign" in changes:
-                contact.callsign = callsign_module.normalize(str(changes.pop("callsign")))
-                contact.base_call = callsign_module.base_call(contact.callsign)
+                normalized = callsign_module.normalize(str(changes.pop("callsign")))
+                if not normalized:
+                    raise ServiceError(_("The callsign cannot be empty."))
+                base = callsign_module.base_call(normalized)
+                clash = session.scalars(
+                    select(Contact).where(Contact.base_call == base, Contact.id != contact_id)
+                ).first()
+                if clash is not None:
+                    raise ServiceError(
+                        _("{call} is already in the address book.").format(call=base)
+                    )
+                contact.callsign = normalized
+                contact.base_call = base
+            if changes.get("dmr_id") is not None:
+                clash = session.scalars(
+                    select(Contact).where(
+                        Contact.dmr_id == changes["dmr_id"], Contact.id != contact_id
+                    )
+                ).first()
+                if clash is not None:
+                    raise ServiceError(
+                        _("DMR ID {dmr_id} already belongs to {call}.").format(
+                            dmr_id=changes["dmr_id"], call=clash.callsign
+                        )
+                    )
+            if "gridsquare" in changes:
+                changes["gridsquare"] = str(changes["gridsquare"]).strip().upper()
             for key, value in changes.items():
                 if hasattr(contact, key):
                     setattr(contact, key, value)

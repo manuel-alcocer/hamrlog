@@ -106,6 +106,7 @@ Screen {
 }
 
 /* Frequency and mode, shown only while editing a logged QSO. */
+#entry-second,
 #entry-extra {
     height: 1;
     width: 100%;
