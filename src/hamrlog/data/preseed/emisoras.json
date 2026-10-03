@@ -175,6 +175,18 @@
     "source": "https://www.proyecto4.com/emisoras-bibanda-vhfuhf/4687-transceptor-movil-vhfuhf-dmr-anytone-at-d578uv-pro.html"
   },
   {
+    "name": "Anytone AT-D878UV",
+    "brand": "Anytone",
+    "rig": "AT-D878UV",
+    "power_w": 7,
+    "types": [
+      "VHF",
+      "UHF"
+    ],
+    "notes": "Portátil bibanda, DMR, GPS, APRS (6 W en UHF)",
+    "source": "https://www.locuradigital.com/walkies_digitales/walkies-anytone/anytone-at-d878uv-walkie-dmr-radioaficion-144-430-mhz.htm"
+  },
+  {
     "name": "Anytone AT-D878UV II Plus",
     "brand": "Anytone",
     "rig": "AT-D878UV II Plus",
@@ -482,6 +494,17 @@
     ],
     "notes": "Portátil bibanda, D-STAR, APRS",
     "source": "https://www.proyecto4.com/walkie-talkies-vhfuhf/4980-walkie-vhfuhf-bibanda-kenwood-th-d75e.html"
+  },
+  {
+    "name": "Kenwood TM-241E",
+    "brand": "Kenwood",
+    "rig": "TM-241E",
+    "power_w": 50,
+    "types": [
+      "VHF"
+    ],
+    "notes": "Móvil FM 2 m, 50/10/5 W, descatalogado",
+    "source": "https://www.museo-cb.com/emisora/kenwood-tm-241-e/"
   },
   {
     "name": "Kenwood TM-D750E",

@@ -571,8 +571,8 @@ msgid "via {call}"
 msgstr "vía {call}"
 
 #: src/hamrlog/tui/widgets/entry.py:36
-msgid "D delete · E edit · R repeat · ↓ back to typing"
-msgstr "D suprimir · E editar · R repetir · ↓ volver a escribir"
+msgid "D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing"
+msgstr "D suprimir · E editar · R repetir · Espacio marca · Ctrl+A todos · ↓ volver a escribir"
 
 #: src/hamrlog/tui/widgets/entry.py:43
 msgid "Editing · Enter saves · Esc cancels · the date and time do not change"
@@ -746,3 +746,48 @@ msgstr "Pestaña anterior"
 
 msgid "Next tab"
 msgstr "Pestaña siguiente"
+
+msgid "QTH"
+msgstr "QTH"
+
+msgid "SETUP"
+msgstr "EQUIPO"
+
+msgid "Setup {name}"
+msgstr "Equipo {name}"
+
+msgid "E: the frequency does not fit this setup"
+msgstr "E: la frecuencia no corresponde a este equipo"
+
+msgid "There is no setup «{name}»."
+msgstr "No existe el equipo «{name}»."
+
+msgid "The frequency does not fit the setup «{name}»; the QSO is marked E."
+msgstr "La frecuencia no corresponde al equipo «{name}»; el QSO queda marcado con E."
+
+msgid "Select all"
+msgstr "Seleccionar todo"
+
+msgid "{count} QSOs selected · E edits frequency, mode and setup of all of them"
+msgstr "{count} QSO seleccionados · E edita la frecuencia, el modo y el equipo de todos"
+
+msgid "{count} QSO selected"
+msgstr "{count} QSO seleccionado"
+
+msgid "Editing {count} QSOs: only frequency, mode and setup; an empty box leaves them as they are"
+msgstr "Editando {count} QSO: solo frecuencia, modo y equipo; una casilla vacía los deja como están"
+
+msgid "✓ {count} QSOs updated"
+msgstr "✓ {count} QSO modificados"
+
+msgid "{count} marked E: the setup does not fit their frequency"
+msgstr "{count} marcados con E: el equipo no corresponde a su frecuencia"
+
+msgid "Nothing to select here: {keys}"
+msgstr "Aquí no se selecciona nada: {keys}"
+
+msgid "INFO"
+msgstr "INFO"
+
+msgid "%y/%m/%d %H:%M"
+msgstr "%d/%m/%y %H:%M"

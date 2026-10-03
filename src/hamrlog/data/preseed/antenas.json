@@ -245,6 +245,16 @@
     "source": "https://radiocenter.es/diamond-sd330-antena-movil-hf-3530mhz-telegirada-automatica/"
   },
   {
+    "name": "Diamond SG7900",
+    "brand": "Diamond",
+    "bands": [
+      "2m",
+      "70cm"
+    ],
+    "notes": "Móvil bibanda, 1,58 m, PL-259, 150 W",
+    "source": "https://www.tot-radio.com/diamond-sg7900-antena-movil-bibanda-vhf-uhf-p-18343.html"
+  },
+  {
     "name": "Diamond V-2000",
     "brand": "Diamond",
     "bands": [
@@ -732,6 +742,16 @@
     ],
     "notes": "Dipolo rígido en V",
     "source": "https://www.locuradigital.com/antenas-dipolos/nagara-tv-416j-antena-dipolo-en-v-para-hf-7-14-21-28-50-mhz.htm"
+  },
+  {
+    "name": "Nagoya NA-771",
+    "brand": "Nagoya",
+    "bands": [
+      "2m",
+      "70cm"
+    ],
+    "notes": "Látigo de walkie bibanda, SMA hembra, 10 W",
+    "source": "https://www.cegradio.es/antenas-walkie-vhf-uhf/638-nagoya-na-771-antena-walkie-doble-banda-sma-hembra.html"
   },
   {
     "name": "Nagoya NL-R2",

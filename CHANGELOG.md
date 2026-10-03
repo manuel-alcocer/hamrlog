@@ -25,10 +25,10 @@
   duplicar. No se pueden modificar ni borrar; se usan al montar un equipo.
 - No se puede borrar la única emisora de un equipo.
 
-**Esquemas 6 a 8**: cada emisora existente se convierte en un equipo con su
-mismo nombre y sus antenas; los países guardados en español pasan a inglés; y
+**Esquemas 6 a 9**: cada emisora existente se convierte en un equipo con su
+mismo nombre y sus antenas; los países guardados en español pasan a inglés;
 las emisoras, antenas y fuentes que ya existían reciben su ID por orden de
-alta.
+alta; y cada QSO puede guardar el equipo con que se hizo.
 
 ### Inglés y español
 
@@ -56,6 +56,19 @@ Las pantallas de menú se retiran para rediseñarlas; queda la vista principal.
   escribe: se calcula a partir de la frecuencia.
 - Un QSO automático admite corregir cualquier campo salvo la fecha y la hora
   (antes, solo el indicativo).
+- Al editar un QSO se le asigna un **equipo** del Inventario; toma de él la
+  emisora y la antena que cubren su frecuencia. Si el equipo no puede trabajar
+  esa frecuencia o banda se guarda igual y se marca con `E` en la columna INFO.
+- El registro tiene columna **QTH**; ya no se repite entre las notas.
+- Columnas del registro: INFO, fecha y hora, indicativo, nombre, frecuencia,
+  modo, equipo, país y QTH. Salen banda, RST y notas, que siguen en el
+  detalle. INFO marca `S` (seleccionado) y `E` (error). La fecha va sin
+  segundos: `DD/MM/AA HH:MM` en español, `AA/MM/DD HH:MM` en inglés.
+- `Espacio` marca QSO del registro y `Ctrl+A` los marca o desmarca todos. Con
+  más de uno marcado, `E` edita a la vez su frecuencia, modo y equipo.
+- Las listas ya no muestran barra de desplazamiento horizontal: con solo
+  teclado no se podía usar; la última columna se acorta.
+- Una raya separa las pestañas del Inventario de su lista.
 - Al registrar un QSO con nombre, si el indicativo ya estaba en la agenda pero
   sin nombre, la ficha lo toma. Si no estaba, se crea con él, como antes.
 - Se mantienen la confirmación de borrado, el asistente del primer arranque y

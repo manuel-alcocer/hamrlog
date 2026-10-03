@@ -20,6 +20,7 @@ from ..core import entry as entry_parser
 from ..core.services import (
     AntennaService,
     ContactService,
+    EquipmentService,
     OperatorService,
     ProfileService,
     QsoService,
@@ -31,7 +32,7 @@ from ..core.services import (
 from ..core.state import SessionState
 from ..db.session import init_engine
 from ..i18n import N_, _
-from .inventory import KINDS, Item, Kind, tab_bar
+from .inventory import KINDS, Item, Kind, ListSuggester, tab_bar
 from .screens.base import ConfirmScreen, Field, FormScreen
 from .widgets.detail import DetailPanel
 from .widgets.entry import (
@@ -125,6 +126,7 @@ class HamrlogApp(App[None]):
         Binding("alt+up", "cycle_brand(-1)", N_("Previous brand"), priority=True, show=False),
         Binding("alt+down", "cycle_brand(1)", N_("Next brand"), priority=True, show=False),
         Binding("ctrl+d", "delete_qso", N_("Delete QSO"), priority=True),
+        Binding("ctrl+a", "mark_all", N_("Select all"), priority=True, show=False),
         Binding("escape", "back_to_entry", N_("Back to typing"), show=False),
         Binding("ctrl+q", "quit", N_("Quit"), priority=True),
     ]
@@ -142,6 +144,8 @@ class HamrlogApp(App[None]):
         self._showing_selection = False
         #: Id of the logged QSO (or item) the entry form is correcting, if any.
         self._editing_id: int | None = None
+        #: The QSOs an edit of several at once applies to; empty otherwise.
+        self._bulk_ids: list[int] = []
         #: "log" or "inventory": what the main frame and the entry line serve.
         self._view = "log"
         #: Active tab of the inventory view, an index into KINDS.
@@ -471,6 +475,9 @@ class HamrlogApp(App[None]):
                 self._save_item(None, values)
             return
 
+        if self._bulk_ids:
+            self._save_bulk(values)
+            return
         if self._editing_id is not None:
             self._save_edit(self._editing_id, values)
             return
@@ -772,9 +779,136 @@ class HamrlogApp(App[None]):
         if event.action == "delete":
             self._confirm_delete(row.id)
         elif event.action == "edit":
-            self._begin_edit(row)
+            if len(history.marked) > 1:
+                self._begin_bulk_edit(history.marked_rows())
+            else:
+                self._begin_edit(row)
         elif event.action == "repeat":
             self._repeat_qso(row)
+        elif event.action == "mark":
+            history.toggle_mark(row.id)
+            self._report_marks()
+
+    def action_mark_all(self) -> None:
+        """Ctrl+A: select every QSO of the log, or none if all were."""
+        if self._modal_open or self._view != "log" or self._editing_id is not None:
+            raise SkipAction()
+        history = self.query_one(HistoryPanel)
+        history.toggle_all()
+        self._report_marks()
+
+    def _report_marks(self) -> None:
+        count = len(self.query_one(HistoryPanel).marked)
+        self._showing_selection = False
+        self.query_one(EntryPanel).feedback(
+            _("{count} QSOs selected · E edits frequency, mode and setup of all of them").format(
+                count=count
+            )
+            if count > 1
+            else _("{count} QSO selected").format(count=count),
+            "info",
+        )
+
+    def _begin_bulk_edit(self, rows: list) -> None:  # type: ignore[type-arg]
+        """Edit several QSOs at once: only their frequency, mode and setup.
+
+        A box starts with the value the QSOs share, or empty when they differ;
+        an empty box leaves each QSO as it was.
+        """
+        def shared(values: list[str]) -> str:
+            return values[0] if len(set(values)) == 1 else ""
+
+        values = {
+            "freq_hz": shared(
+                [bands.format_frequency(r.freq_hz) if r.freq_hz else "" for r in rows]
+            ),
+            "mode": shared([r.mode for r in rows]),
+            "equipment": shared([r.equipment_name for r in rows]),
+        }
+        panel = self.query_one(EntryPanel)
+        self._bulk_ids = [r.id for r in rows]
+        self._editing_id = rows[0].id
+        self._showing_selection = False
+        panel.set_suggesters(
+            {"equipment": ListSuggester([e.name for e in EquipmentService.list_all()])}
+        )
+        panel.start_edit(values, bulk=True)
+        panel.feedback(
+            _("Editing {count} QSOs: only frequency, mode and setup; "
+              "an empty box leaves them as they are").format(count=len(rows)),
+            "info",
+        )
+
+    def _save_bulk(self, values: dict[str, str]) -> None:
+        """Apply the frequency, mode and setup typed to every selected QSO."""
+        panel = self.query_one(EntryPanel)
+        changes: dict[str, object] = {}
+        freq_text = values.get("freq_hz", "").strip()
+        if freq_text:
+            freq_hz = bands.parse_frequency(freq_text)
+            if freq_hz is None:
+                panel.feedback(
+                    _("Frequency not recognised: «{text}»").format(text=freq_text), "error"
+                )
+                return
+            found = bands.from_frequency(freq_hz)
+            changes.update(freq_hz=freq_hz, band=found.name if found else "")
+        mode_text = values.get("mode", "").strip()
+        if mode_text:
+            mode = modes.get(mode_text)
+            if mode is None:
+                panel.feedback(_("Unknown mode: «{mode}»").format(mode=mode_text), "error")
+                return
+            changes["mode"] = mode.name
+        setup_text = values.get("equipment", "").strip()
+        if setup_text:
+            setup = next(
+                (e for e in EquipmentService.list_all() if e.name.lower() == setup_text.lower()),
+                None,
+            )
+            if setup is None:
+                panel.feedback(
+                    _("There is no setup «{name}».").format(name=setup_text), "error"
+                )
+                return
+            changes["equipment_id"] = setup.id
+        if not changes:
+            self._end_edit()
+            panel.feedback(_("No changes."), "info")
+            return
+
+        history = self.query_one(HistoryPanel)
+        updated_rows = []
+        for qso_id in self._bulk_ids:
+            row = QsoService.get(qso_id)
+            if row is None:
+                continue
+            own = dict(changes)
+            if "freq_hz" in own and own["freq_hz"] != row.freq_hz and row.repeater_call:
+                # The repeater no longer describes where this QSO took place.
+                own.update(freq_tx_hz=None, repeater_id=None, repeater_call="")
+            try:
+                updated_rows.append(QsoService.update(qso_id, own))
+            except ServiceError as exc:
+                panel.feedback(str(exc), "error")
+                return
+        self._end_edit()
+        for updated in updated_rows:
+            history.replace_row(updated)
+        current = history.selected_row()
+        if current is not None:
+            self._refresh_detail(current)
+        self._refresh_stats()
+        flagged = sum(1 for r in updated_rows if r.equipment_mismatch)
+        message = _("✓ {count} QSOs updated").format(count=len(updated_rows))
+        if flagged:
+            panel.feedback(
+                message + "   ⚠ " + _("{count} marked E: the setup does not fit their frequency")
+                .format(count=flagged),
+                "warning",
+            )
+        else:
+            panel.feedback(message, "ok")
 
     @on(BrowseBar.UnknownKey)
     def _on_unknown_browse_key(self) -> None:
@@ -806,8 +940,12 @@ class HamrlogApp(App[None]):
         for key in entry_parser.DIGITAL_KEYS:
             if key in values:
                 values[key] = str((row.digital_data or {}).get(key, ""))
+        values["equipment"] = row.equipment_name
         self._editing_id = row.id
         self._showing_selection = False
+        panel.set_suggesters(
+            {"equipment": ListSuggester([e.name for e in EquipmentService.list_all()])}
+        )
         panel.start_edit(values)
         panel.feedback(
             _("Editing the QSO with {call} at {time} UTC").format(
@@ -818,6 +956,7 @@ class HamrlogApp(App[None]):
 
     def _end_edit(self) -> None:
         self._editing_id = None
+        self._bulk_ids = []
         self.query_one(EntryPanel).stop_edit()
 
     def _save_edit(self, qso_id: int, values: dict[str, str]) -> None:
@@ -828,6 +967,25 @@ class HamrlogApp(App[None]):
             self._end_edit()
             panel.feedback(_("That QSO no longer exists."), "warning")
             return
+
+        # The set is not a QSO field the parser knows: it is looked up by name.
+        values = dict(values)
+        equipment_text = values.pop("equipment", "").strip()
+        equipment = None
+        if equipment_text:
+            equipment = next(
+                (
+                    candidate
+                    for candidate in EquipmentService.list_all()
+                    if candidate.name.lower() == equipment_text.lower()
+                ),
+                None,
+            )
+            if equipment is None:
+                panel.feedback(
+                    _("There is no setup «{name}».").format(name=equipment_text), "error"
+                )
+                return
 
         parsed = entry_parser.from_fields(
             values,
@@ -883,6 +1041,8 @@ class HamrlogApp(App[None]):
             for key, value in changes.items()
             if key == "repeater_id" or getattr(row, key, None) != value
         }
+        if (equipment.name if equipment else "") != row.equipment_name:
+            changes["equipment_id"] = equipment.id if equipment else None
         if not set(changes) - {"repeater_id"}:
             self._end_edit()
             panel.feedback(_("No changes."), "info")
@@ -901,6 +1061,12 @@ class HamrlogApp(App[None]):
         message = _("✓ {call} updated").format(call=updated.call)
         if moved and updated.band:
             message += _(" · band {band}").format(band=updated.band)
+        if updated.equipment_mismatch:
+            warnings.append(
+                _("The frequency does not fit the setup «{name}»; the QSO is marked E.").format(
+                    name=updated.equipment_name
+                )
+            )
         if warnings:
             panel.feedback(f"{message}   ⚠ {' '.join(warnings)}", "warning")
         else:
@@ -1099,6 +1265,11 @@ class HamrlogApp(App[None]):
         item = self.query_one(ItemTable).selected_item()
         panel = self.query_one(EntryPanel)
         if item is None:
+            return
+        if action == "mark":
+            panel.feedback(
+                _("Nothing to select here: {keys}").format(keys=_(INVENTORY_BROWSE)), "warning"
+            )
             return
         if action == "repeat":
             panel.feedback(

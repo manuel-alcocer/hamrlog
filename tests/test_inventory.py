@@ -499,3 +499,143 @@ async def test_page_keys_page_through_the_list_of_each_view(operator):
         # Paging moves the list, never the tab.
         assert str(app.query_one("#inventory-tabs").render()) == tabs_before
         assert app.query_one(EntryPanel).browsing
+
+
+# ------------------------------------------------- setups assigned to QSOs --
+@pytest.fixture
+def setups():
+    """A 2 m/70 cm handheld kit and an HF kit, with antennas that suit them."""
+    from hamrlog.core.services import StationTypeService
+
+    handheld = StationService.create(
+        "Anytone AT-D878UV", type_ids=StationTypeService.resolve("VHF, UHF")
+    )
+    hf_rig = StationService.create(
+        "Icom IC-705", type_ids=StationTypeService.resolve("HF, VHF, UHF")
+    )
+    whip = AntennaService.create("Nagoya NA-771", ["2m", "70cm"])
+    vertical = AntennaService.create("Komunica HF-PRO2", ["40m", "20m"])
+    portable = EquipmentService.create("Walkie", [handheld.id], [whip.id])
+    hf = EquipmentService.create("HF", [hf_rig.id], [whip.id, vertical.id])
+    return {"walkie": portable, "hf": hf, "handheld": handheld, "hf_rig": hf_rig,
+            "whip": whip, "vertical": vertical}
+
+
+def log_on(operator, band: str, call: str = "EA4ABC"):
+    from hamrlog.core.services import QsoService
+    from hamrlog.core.state import SessionState
+
+    state = SessionState(operator_id=operator.id)
+    state.set_band(band)
+    return QsoService.log({"call": call}, state)
+
+
+def test_a_setup_assigned_to_a_qso_brings_its_radio_and_antenna(operator, setups):
+    from hamrlog.core.services import QsoService
+
+    row = log_on(operator, "20m")
+    updated = QsoService.update(row.id, {"equipment_id": setups["hf"].id})
+    assert updated.equipment_name == "HF"
+    assert not updated.equipment_mismatch
+    assert updated.station_name == "Icom IC-705"
+    # The antenna that works the band, not just the first one of the set.
+    assert updated.antenna_name == "Komunica HF-PRO2"
+
+
+def test_a_setup_that_cannot_work_the_frequency_is_kept_but_flagged(operator, setups):
+    from hamrlog.core.services import QsoService
+
+    row = log_on(operator, "40m")
+    updated = QsoService.update(row.id, {"equipment_id": setups["walkie"].id})
+    assert updated.equipment_name == "Walkie"
+    assert updated.equipment_mismatch
+    assert updated.station_name == "Anytone AT-D878UV"
+
+    # Moving the QSO to a band the set works clears the flag.
+    updated = QsoService.update(row.id, {"freq_hz": 145_500_000})
+    assert not updated.equipment_mismatch
+
+
+def test_deleting_a_setup_leaves_its_qsos_alone(operator, setups):
+    from hamrlog.core.services import QsoService
+
+    row = log_on(operator, "2m")
+    QsoService.update(row.id, {"equipment_id": setups["walkie"].id})
+    EquipmentService.delete(setups["walkie"].id)
+    after = QsoService.get(row.id)
+    assert after.equipment_name == ""
+    assert after.station_name == "Anytone AT-D878UV"
+
+
+async def edit_first_qso(pilot, app):
+    await pilot.press("up")
+    await pilot.pause()
+    await pilot.press("e")
+    await pilot.pause()
+
+
+async def test_a_setup_is_chosen_while_editing_a_qso_in_the_log(operator, setups):
+    log_on(operator, "40m")
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause()
+        await edit_first_qso(pilot, app)
+        box = app.query_one("#entry-equipment")
+        assert box.display and box.value == ""
+
+        box.value = "walkie"
+        await pilot.press("enter")
+        await pilot.pause()
+        history = app.query_one(HistoryPanel)
+        # Saved anyway, but flagged E in the INFO column.
+        assert str(history.get_cell_at((history.cursor_row, 0))) == "E"
+        assert "no corresponde" in feedback(app)
+        assert "no corresponde" in str(app.query_one("#detail").render())
+
+        # Saving leaves the cursor on the QSO: E edits it again.
+        assert app.query_one(EntryPanel).browsing
+        await pilot.press("e")
+        await pilot.pause()
+        assert app.query_one("#entry-equipment").value == "Walkie"
+        app.query_one("#entry-equipment").value = "HF"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert str(history.get_cell_at((history.cursor_row, 0))) == ""
+
+        await pilot.press("e")
+        await pilot.pause()
+        app.query_one("#entry-equipment").value = "No existe"
+        await pilot.press("enter")
+        await pilot.pause()
+        assert "No existe el equipo" in feedback(app)
+        assert app.query_one(EntryPanel).editing
+
+
+async def test_the_log_has_a_qth_column(operator):
+    from hamrlog.core.services import QsoService
+    from hamrlog.core.state import SessionState
+
+    state = SessionState(operator_id=operator.id)
+    state.set_band("40m")
+    QsoService.log({"call": "EA4ABC", "qth": "Madrid", "comment": "nota"}, state)
+    app = HamrlogApp()
+    async with app.run_test(size=(140, 30)) as pilot:
+        await pilot.pause()
+        history = app.query_one(HistoryPanel)
+        assert str(history.get_cell(str(QsoService.recent()[0].id), "QTH")) == "Madrid"
+
+
+async def test_a_rule_separates_the_tabs_from_the_list(operator):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await open_tab(pilot, app)
+        tabs = app.query_one("#inventory-tabs")
+        table = app.query_one(ItemTable)
+        lines = [
+            "".join(segment.text for segment in strip)
+            for strip in app.screen._compositor.render_strips()
+        ]
+        rule = lines[tabs.region.y + 1]
+        assert "─" in rule and "Equipos" not in rule
+        # The list starts right under the rule.
+        assert table.region.y == tabs.region.y + 2

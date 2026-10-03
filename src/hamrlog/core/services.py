@@ -46,7 +46,7 @@ MANUAL_EDITABLE_FIELDS: frozenset[str] = frozenset(
     {
         "call", "name", "qso_utc", "band", "freq_hz", "freq_tx_hz", "mode", "rst_sent",
         "rst_rcvd", "qth", "gridsquare", "country", "comment", "power_w", "station_id",
-        "operator_id", "digital_data", "repeater_id", "repeater_call",
+        "operator_id", "digital_data", "repeater_id", "repeater_call", "equipment_id",
     }
 )
 
@@ -647,11 +647,17 @@ class EquipmentService:
 
     @staticmethod
     def delete(equipment_id: int) -> None:
-        """Remove the set; its radios, antennas and supplies stay."""
+        """Remove the set; its radios, antennas and supplies stay.
+
+        QSOs made with it keep their radio and antenna, only the set goes.
+        """
         with session_scope() as session:
             equipment = session.get(Equipment, equipment_id)
             if equipment is None:
                 raise ServiceError(_("Equipment set not found."))
+            session.query(Qso).filter(Qso.equipment_id == equipment_id).update(
+                {"equipment_id": None}
+            )
             session.delete(equipment)
 
 
@@ -1171,6 +1177,19 @@ class SettingsService:
 # QSOs
 # --------------------------------------------------------------------------- #
 
+#: What a set needs loaded to tell whether a frequency and band suit it.
+_EQUIPMENT_PARTS = (
+    selectinload(Equipment.stations).selectinload(Station.types),
+    selectinload(Equipment.antennas),
+)
+
+#: Eager loads that let a QSO row say whether its equipment set fits it.
+_EQUIPMENT_LOAD = (
+    selectinload(Qso.equipment).selectinload(Equipment.stations).selectinload(Station.types),
+    selectinload(Qso.equipment).selectinload(Equipment.antennas),
+)
+
+
 def _to_row(qso: Qso) -> QsoRow:
     """Convert an eagerly loaded QSO into the UI/API shape."""
     return QsoRow(
@@ -1194,6 +1213,10 @@ def _to_row(qso: Qso) -> QsoRow:
         repeater_call=qso.repeater_call or "",
         antenna_name=qso.antenna.name if qso.antenna else "",
         digital_data=dict(qso.digital_data or {}),
+        equipment_name=qso.equipment.name if qso.equipment else "",
+        equipment_mismatch=(
+            qso.equipment is not None and not qso.equipment.fits(qso.freq_hz, qso.band)
+        ),
     )
 
 
@@ -1350,6 +1373,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .where(Qso.id == qso.id)
             ).one()
@@ -1370,6 +1394,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .order_by(Qso.qso_utc.desc(), Qso.id.desc())
                 .limit(limit)
@@ -1397,6 +1422,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .order_by(Qso.qso_utc.desc(), Qso.id.desc())
                 .limit(limit)
@@ -1431,6 +1457,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .where(Qso.id == qso_id)
             ).first()
@@ -1468,6 +1495,16 @@ class QsoService:
                     ).format(fields=", ".join(rejected))
                 )
 
+            equipment = None
+            if changes.get("equipment_id") is not None:
+                equipment = session.scalars(
+                    select(Equipment)
+                    .options(*_EQUIPMENT_PARTS)
+                    .where(Equipment.id == changes["equipment_id"])
+                ).first()
+                if equipment is None:
+                    raise ServiceError(_("Equipment set not found."))
+
             for key, value in changes.items():
                 setattr(qso, key, value)
 
@@ -1481,8 +1518,16 @@ class QsoService:
                 band = bands.from_frequency(int(changes["freq_hz"]))
                 if band:
                     qso.band = band.name
+            if equipment is not None:
+                # The set says which radio and antenna, as far as it can: the
+                # ones that suit the QSO, so MY_RIG and MY_ANTENNA follow.
+                station, antenna = equipment.parts_for(qso.freq_hz, qso.band)
+                qso.station_id = station.id if station else None
+                qso.antenna_id = antenna.id if antenna else None
 
             session.flush()
+            # The relationships still point where the old ids did.
+            session.expire(qso)
             loaded = session.scalars(
                 select(Qso)
                 .options(
@@ -1490,6 +1535,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .where(Qso.id == qso.id)
             ).one()
@@ -1521,6 +1567,7 @@ class QsoService:
                     joinedload(Qso.station),
                     joinedload(Qso.antenna),
                     joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
                 )
                 .where(Qso.base_call == base)
                 .order_by(Qso.qso_utc.desc())

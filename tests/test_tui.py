@@ -238,18 +238,33 @@ async def test_deleting_with_an_empty_log_is_harmless(operator):
 
 
 async def test_main_history_shows_date_and_time(operator):
+    from hamrlog import i18n
     from hamrlog.i18n import _
     from hamrlog.tui.widgets.history import COLUMNS
 
-    assert _(COLUMNS[0][0]) == "FECHA HORA"
+    assert [_(label) for label, _width in COLUMNS[:2]] == ["INFO", "FECHA HORA"]
+    assert "BAND" not in [label for label, _width in COLUMNS]
+    assert "NOTES" not in [label for label, _width in COLUMNS]
 
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         await type_line(pilot, app, "ea1aaa")
         history = app.query_one(HistoryPanel)
-        cell = history.get_cell_at((0, 0))
-        stamp = QsoService.recent()[0].qso_utc.strftime("%Y-%m-%d %H:%M:%S")
-        assert str(cell) == stamp
+        stamp = QsoService.recent()[0].qso_utc
+        # Spanish: day first, no seconds. Nothing to flag: INFO is empty.
+        assert str(history.get_cell_at((0, 1))) == stamp.strftime("%d/%m/%y %H:%M")
+        assert str(history.get_cell_at((0, 0))) == ""
+    try:
+        i18n.set_language("en")
+        assert _(COLUMNS[1][0]) == "DATE TIME"
+        app = HamrlogApp()
+        async with app.run_test(size=(120, 30)) as pilot:
+            await pilot.pause()
+            history = app.query_one(HistoryPanel)
+            # English: year first.
+            assert str(history.get_cell_at((0, 1))) == stamp.strftime("%y/%m/%d %H:%M")
+    finally:
+        i18n.set_language("es")
 
 
 async def test_repeater_and_direct_commands(operator):
@@ -521,7 +536,7 @@ async def test_history_direction_is_configurable(operator):
 
         # Oldest first: the insert row is at the bottom.
         assert app.state.history_order == ORDER_OLDEST_FIRST
-        assert history.get_row_at(0)[1].plain == "EA1AAA"
+        assert history.get_row_at(0)[2].plain == "EA1AAA"
         assert history.coordinate_to_cell_key((2, 0)).row_key.value == INSERT_ROW_KEY
 
         app.state.history_order = ORDER_NEWEST_FIRST
@@ -530,7 +545,7 @@ async def test_history_direction_is_configurable(operator):
 
         # Newest first: the insert row moves to the top, where QSOs appear.
         assert history.coordinate_to_cell_key((0, 0)).row_key.value == INSERT_ROW_KEY
-        assert history.get_row_at(1)[1].plain == "EA2BBB"
+        assert history.get_row_at(1)[2].plain == "EA2BBB"
         assert history.on_insert_row
 
 

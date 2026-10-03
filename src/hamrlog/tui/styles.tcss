@@ -28,6 +28,13 @@ Screen {
     padding: 0;
 }
 
+/* No horizontal scrollbar on the lists: the arrows belong to the entry
+   line, so it could never be used, and the last column just gets shorter. */
+#history,
+#inventory-table {
+    overflow-x: hidden;
+}
+
 #history {
     height: 1fr;
     min-height: 3;
@@ -50,10 +57,14 @@ Screen {
     min-height: 3;
 }
 
+/* Two rows: the tab names and, under them, the same rule that separates the
+   list from the detail pane. */
 #inventory-tabs {
-    height: 1;
+    height: 2;
     padding: 0 1;
-    background: $panel;
+    /* Same background as the list: only the active tab is highlighted. */
+    background: $surface;
+    border-bottom: solid $primary-darken-2;
 }
 
 #inventory-table {

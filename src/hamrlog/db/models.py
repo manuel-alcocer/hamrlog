@@ -307,6 +307,38 @@ class Equipment(Base):
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Equipment {self.name}>"
 
+    def fits(self, freq_hz: int | None, band: str | None) -> bool:
+        """Whether a QSO on this frequency and band could be made with the set.
+
+        Some radio must tune the frequency and, when the set lists antennas,
+        some antenna must work the band. A QSO with no frequency or band has
+        nothing to check against.
+        """
+        radio_ok = freq_hz is None or any(s.covers(freq_hz) for s in self.stations)
+        antenna_ok = not band or not self.antennas or any(
+            a.covers_band(band) for a in self.antennas
+        )
+        return radio_ok and antenna_ok
+
+    def parts_for(
+        self, freq_hz: int | None, band: str | None
+    ) -> tuple[Station | None, Antenna | None]:
+        """The radio and antenna of the set a QSO most likely used.
+
+        The first that suits the frequency and band, or the first one when
+        none does: the QSO is then flagged, but still says what it was made
+        with.
+        """
+        station = next(
+            (s for s in self.stations if freq_hz is None or s.covers(freq_hz)),
+            self.stations[0] if self.stations else None,
+        )
+        antenna = next(
+            (a for a in self.antennas if a.covers_band(band)),
+            self.antennas[0] if self.antennas else None,
+        )
+        return station, antenna
+
 
 class Contact(Base):
     """An address book entry.
@@ -462,6 +494,10 @@ class Qso(Base):
     station_id: Mapped[int | None] = mapped_column(ForeignKey("stations.id"), nullable=True)
     antenna_id: Mapped[int | None] = mapped_column(ForeignKey("antennas.id"), nullable=True)
     repeater_id: Mapped[int | None] = mapped_column(ForeignKey("repeaters.id"), nullable=True)
+    #: The equipment set it was made with, assigned when editing it.
+    equipment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipment.id", ondelete="SET NULL"), nullable=True
+    )
     #: Repeater callsign copied here so the contact keeps its history even if
     #: the repeater is later deleted from the list.
     repeater_call: Mapped[str] = mapped_column(String(32), default="", index=True)
@@ -507,6 +543,7 @@ class Qso(Base):
     station: Mapped[Station | None] = relationship()
     antenna: Mapped[Antenna | None] = relationship()
     repeater: Mapped[Repeater | None] = relationship()
+    equipment: Mapped[Equipment | None] = relationship()
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Qso {self.call} {self.qso_utc:%Y-%m-%d %H:%M} {self.band} {self.mode}>"
@@ -552,4 +589,5 @@ class SchemaVersion(Base):
 #:   the brand of each.
 #: 7 stores country names in English, as ADIF does; they are translated when shown.
 #: 8 gives radios, antennas and supplies their own unique code (E0001, A0001, S0001).
-CURRENT_SCHEMA_VERSION = 8
+#: 9 lets a QSO record the equipment set it was made with.
+CURRENT_SCHEMA_VERSION = 9

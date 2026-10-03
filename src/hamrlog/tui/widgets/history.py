@@ -35,16 +35,29 @@ ORDER_NEWEST_FIRST = "desc"
 #: (column label, width). None width lets the column take the remaining space.
 #: The English label is the column key; the heading shown is its translation.
 COLUMNS: tuple[tuple[str, int | None], ...] = (
-    (N_("DATE TIME"), 19),
+    # Flags of the row, one letter each (see INFO_FLAGS); empty when there is
+    # nothing to say about it.
+    (N_("INFO"), 4),
+    (N_("DATE TIME"), 16),
     (N_("CALLSIGN"), 12),
-    (N_("NAME"), 11),
-    (N_("BAND"), 6),
-    (N_("FREQUENCY"), 12),
+    (N_("NAME"), 12),
+    (N_("FREQUENCY"), 10),
     (N_("MODE"), 7),
-    (N_("RST"), 8),
+    # The setup rather than the reports: those are in the detail pane.
+    (N_("SETUP"), 16),
     (N_("COUNTRY"), 14),
-    (N_("NOTES"), None),
+    (N_("QTH"), None),
 )
+
+#: Letters of the INFO column, in the order they are written: S for a QSO
+#: selected with Space or Ctrl+A, E for one with an error (so far, a setup
+#: that cannot work its frequency). A selected QSO with an error reads «SE».
+FLAG_SELECTED = "S"
+FLAG_ERROR = "E"
+
+#: Date and time without seconds. A strftime pattern, translated like any
+#: text: the English order is year first, the Spanish one day first.
+DATE_FORMAT = N_("%y/%m/%d %H:%M")
 
 
 class HistoryPanel(DataTable):
@@ -63,6 +76,8 @@ class HistoryPanel(DataTable):
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self.order = order
         self._rows: list[QsoRow] = []
+        #: Ids of the QSOs selected with Space or Ctrl+A.
+        self.marked: set[int] = set()
 
     def on_mount(self) -> None:
         self.cursor_type = "row"
@@ -122,6 +137,8 @@ class HistoryPanel(DataTable):
             rows: QSOs oldest first, as the service returns them.
         """
         self._rows = list(rows)
+        # A deleted QSO cannot stay selected.
+        self.marked &= {row.id for row in self._rows}
         self.clear()
 
         ordered = (
@@ -189,11 +206,34 @@ class HistoryPanel(DataTable):
         it without truncating.
         """
         cells = [Text("") for _ in COLUMNS]
-        cells[0] = Text(f"▸ {_(INSERT_LABEL)}", style="bold green")
+        cells[0] = Text("▸", style="bold green")
+        cells[1] = Text(_(INSERT_LABEL), style="bold green")
         self.add_row(*cells, key=INSERT_ROW_KEY)
 
     def _append(self, row: QsoRow) -> None:
         self.add_row(*self._cells(row), key=str(row.id))
+
+    # ---------------------------------------------------------- selection --
+    def toggle_mark(self, qso_id: int) -> None:
+        """Select a QSO, or unselect it if it already was."""
+        self.marked ^= {qso_id}
+        self._redraw_marks([qso_id])
+
+    def toggle_all(self) -> None:
+        """Select every QSO shown, or none when all of them already are."""
+        everything = {row.id for row in self._rows}
+        changed = everything if self.marked != everything else set(self.marked)
+        self.marked = set() if self.marked == everything else everything
+        self._redraw_marks(changed)
+
+    def marked_rows(self) -> list[QsoRow]:
+        return [row for row in self._rows if row.id in self.marked]
+
+    def _redraw_marks(self, qso_ids: object) -> None:
+        by_id = {row.id: row for row in self._rows}
+        for qso_id in qso_ids:  # type: ignore[attr-defined]
+            if qso_id in by_id:
+                self.update_cell(str(qso_id), COLUMNS[0][0], self._cells(by_id[qso_id])[0])
 
     def replace_row(self, row: QsoRow) -> None:
         """Redraw one QSO after an edit, leaving the cursor where it is."""
@@ -203,30 +243,18 @@ class HistoryPanel(DataTable):
 
     def _cells(self, row: QsoRow) -> list[Text]:
         marker = Text("M ", style="bold yellow") if row.is_manual else Text("")
+        info = Text.assemble(
+            (FLAG_SELECTED if row.id in self.marked else "", "bold cyan"),
+            (FLAG_ERROR if row.equipment_mismatch else "", "bold red"),
+        )
         return [
-            Text(row.qso_utc.strftime("%Y-%m-%d %H:%M:%S")),
+            info,
+            Text(row.qso_utc.strftime(_(DATE_FORMAT))),
             marker + Text(row.call, style="bold"),
             Text(row.name or "-"),
-            Text(row.band or "-", style="yellow"),
             Text(bands.format_frequency(row.freq_hz, with_unit=False)),
             Text(row.mode or "-", style="green"),
-            Text(f"{row.rst_sent}/{row.rst_rcvd}".strip("/") or "-"),
+            Text(row.equipment_name or "", style="red" if row.equipment_mismatch else ""),
             Text(_(row.country) if row.country else "-", style="dim"),
-            Text(self._notes(row), style="dim"),
+            Text(row.qth or ""),
         ]
-
-    @staticmethod
-    def _notes(row: QsoRow) -> str:
-        """Comment plus any detail worth showing inline."""
-        parts = []
-        if row.repeater_call:
-            parts.append(_("via {call}").format(call=row.repeater_call))
-        if row.qth:
-            parts.append(row.qth)
-        digital = row.digital_data or {}
-        for key in ("talkgroup", "reflector", "room"):
-            if digital.get(key):
-                parts.append(f"{key[:2].upper()}:{digital[key]}")
-        if row.comment:
-            parts.append(row.comment)
-        return " · ".join(parts)

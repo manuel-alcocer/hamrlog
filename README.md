@@ -123,21 +123,43 @@ La línea de abajo tiene **dos estados**, según dónde esté el cursor:
 **Sobre un QSO ya registrado** deja de aceptar texto y ofrece sus acciones:
 
 ```
- D suprimir · E editar · R repetir · ↓ volver a escribir
+ D suprimir · E editar · R repetir · Espacio marca · Ctrl+A todos · ↓ volver a escribir
 ```
 
 | Tecla | Efecto |
 |---|---|
 | `D` | Borra ese QSO, con confirmación |
 | `E` | **Editar**: lo corrige ahí mismo, en la línea de entrada |
+| `Espacio` | Marca o desmarca el QSO (sale `S` en la columna INFO) |
+| `Ctrl+A` | Marca todos, o los desmarca si ya lo estaban |
 | `R` | **Repetir**: lo devuelve a la línea, editable, para registrarlo otra vez |
 | `↓` o `Esc` | Vuelve a `<Insertar nuevo>` |
 
 Editar no abre ninguna ventana: la línea de entrada se rellena con ese QSO y
-añade una segunda fila con frecuencia y modo. Cambias lo que haga falta,
-`Enter` guarda y `Esc` cancela. Se puede corregir todo **menos la fecha y la
-hora**. La banda no se escribe: la calcula la aplicación a partir de la
+añade una segunda fila con frecuencia, modo y **equipo**. Cambias lo que haga
+falta, `Enter` guarda y `Esc` cancela. Se puede corregir todo **menos la fecha
+y la hora**. La banda no se escribe: la calcula la aplicación a partir de la
 frecuencia.
+
+Con **más de un QSO marcado**, `E` los edita todos a la vez, pero solo en
+frecuencia, modo y equipo. Cada casilla empieza con el valor que comparten, o
+vacía si difieren; una casilla vacía deja cada QSO como estaba.
+
+La lista muestra el equipo de cada QSO; los informes (RST) están en el detalle
+de abajo al recorrerla.
+
+En la casilla EQUIPO se escribe el nombre de uno de tus equipos del
+Inventario (`→` completa). El QSO toma de él la emisora y la antena que cubren
+su frecuencia, que son las que salen en ADIF como `MY_RIG` y `MY_ANTENNA`. Si
+ninguna de sus emisoras sintoniza esa frecuencia, o ninguna de sus antenas
+trabaja esa banda, se guarda igual, pero su columna INFO muestra `E` y el
+detalle explica por qué.
+
+La lista del registro muestra INFO, fecha y hora, indicativo, nombre,
+frecuencia, modo, equipo, país y QTH. INFO lleva una letra por cada cosa que
+señalar: `S` si el QSO está seleccionado, `E` si tiene un error (un QSO
+seleccionado y con error dice `SE`); vacía si no hay nada. La fecha va sin
+segundos: `DD/MM/AA HH:MM` en español y `AA/MM/DD HH:MM` en inglés.
 
 Repetir se guarda con la banda y el modo actuales, no con los de entonces:
 repetir es volver a trabajar a esa estación, no rearchivar el contacto viejo.

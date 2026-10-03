@@ -48,7 +48,11 @@ class DetailPanel(Static):
         third = Text(no_wrap=True, overflow="ellipsis")
         if row.operator_callsign:
             _chunk(third, f"Op {row.operator_callsign}", "cyan")
-        if row.station_name:
+        if row.equipment_name:
+            _chunk(third, _("Setup {name}").format(name=row.equipment_name))
+            if row.equipment_mismatch:
+                _chunk(third, _("E: the frequency does not fit this setup"), "bold red")
+        elif row.station_name:
             _chunk(third, row.station_name)
         digital = modes.status_summary(row.digital_data or {}, has_repeater=bool(row.repeater_call))
         if digital:

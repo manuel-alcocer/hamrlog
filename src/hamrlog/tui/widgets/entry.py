@@ -29,15 +29,18 @@ from textual.widgets import Input, Label, Static
 from ...i18n import N_, _
 
 #: Keys that act on the QSO under the cursor while browsing the log.
-BROWSE_ACTIONS: dict[str, str] = {"d": "delete", "e": "edit", "r": "repeat"}
+BROWSE_ACTIONS: dict[str, str] = {"d": "delete", "e": "edit", "r": "repeat", " ": "mark"}
+
+#: The only boxes an edit of several QSOs at once offers.
+BULK_FIELDS: tuple[str, ...] = ("freq_hz", "mode", "equipment")
 
 #: What the entry line offers while the cursor sits on a logged QSO. The
 #: prompts and help lines below are translated where they are shown.
-BROWSE_PROMPT = N_("D delete · E edit · R repeat · ↓ back to typing")
+BROWSE_PROMPT = N_("D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing")
 
 #: Offered on a second row while editing, unless the entry line has them.
 #: The band is not among them: the application works it out from the frequency.
-EDIT_EXTRA_FIELDS: tuple[str, ...] = ("freq_hz", "mode")
+EDIT_EXTRA_FIELDS: tuple[str, ...] = ("freq_hz", "mode", "equipment")
 
 #: Help line while a logged QSO is being edited.
 EDIT_KEYS = N_("Editing · Enter saves · Esc cancels · the date and time do not change")
@@ -70,6 +73,8 @@ FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
     "stations": (N_("RADIOS"), 22),
     "antennas": (N_("ANTENNAS"), 22),
     "supplies": (N_("SUPPLIES"), 16),
+    # Equipment set of a logged QSO, offered only while editing it.
+    "equipment": (N_("SETUP"), 22),
     "notes": (N_("NOTES"), None),
 }
 
@@ -189,6 +194,8 @@ class EntryPanel(Vertical):
         self._browsing = False
         #: True while the form holds a logged QSO being corrected.
         self._editing = False
+        #: True while one edit applies to several marked QSOs.
+        self._bulk = False
         #: Keys of the dialog open in the main panel, shown on the help line.
         self._menu_keys = ""
         #: Pending rebuild of the field boxes, awaited by ``ready()`` so the
@@ -211,13 +218,20 @@ class EntryPanel(Vertical):
     def fields(self) -> list[EntryField]:
         """The boxes in use: the second row only counts while editing.
 
-        A new QSO takes its frequency and mode from the session.
+        A new QSO takes its frequency and mode from the session. An edit of
+        several QSOs only offers BULK_FIELDS.
         """
+        if self._editing and self._bulk:
+            return [box for box in self.query(EntryField) if box.field_name in BULK_FIELDS]
         return [
             box
             for box in self.query(EntryField)
             if self._editing or not box.has_class("entry-extra-field")
         ]
+
+    @property
+    def bulk(self) -> bool:
+        return self._editing and self._bulk
 
     @property
     def browsing(self) -> bool:
@@ -370,17 +384,25 @@ class EntryPanel(Vertical):
             self.focus_first()
 
     # ------------------------------------------------------------- editing --
-    def start_edit(self, values: dict[str, str]) -> None:
+    def start_edit(self, values: dict[str, str], *, bulk: bool = False) -> None:
         """Turn the action bar back into the form, holding a logged QSO.
 
         The draft put aside on entering browse mode is left alone, so it
-        still comes back once the cursor returns to the insert row.
+        still comes back once the cursor returns to the insert row. With
+        ``bulk`` the edit covers several QSOs and only BULK_FIELDS can be
+        typed in; any other box is shown disabled, or hidden with its row.
         """
         self._editing = True
+        self._bulk = bulk
         self.query_one("#entry-browse", BrowseBar).display = False
-        self.query_one("#entry-fields", Horizontal).display = True
+        main = self.query_one("#entry-fields", Horizontal)
         extra = self.query_one("#entry-extra", Horizontal)
         extra.display = bool(extra.children)
+        main.display = not bulk or any(
+            box.field_name in BULK_FIELDS for box in main.query(EntryField)
+        )
+        for box in self.query(EntryField):
+            box.disabled = bulk and box.field_name not in BULK_FIELDS
         for box in self.fields:
             box.value = values.get(box.field_name, "")
         self.show_keys(None)
@@ -398,6 +420,9 @@ class EntryPanel(Vertical):
 
     def _leave_edit(self) -> None:
         self._editing = False
+        self._bulk = False
+        for box in self.query(EntryField):
+            box.disabled = False
         self.query_one("#entry-extra", Horizontal).display = False
         for box in self.query(EntryField):
             box.value = ""

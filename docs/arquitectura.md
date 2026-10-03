@@ -236,6 +236,6 @@ datos; falta la de presentación.
 | `repeaters` | Repetidores: frecuencias, shift, CTCSS y datos digitales |
 | `contacts` | Agenda: quién es cada indicativo, con su ID DMR |
 | `profiles` | Configuraciones guardadas, incluido el formato de la entrada rápida |
-| `qsos` | Contactos, con `digital_data` y `extra` en JSON |
+| `qsos` | Contactos, con `digital_data` y `extra` en JSON, y el equipo con que se hicieron (`equipment_id`) |
 | `settings` | Clave/valor: estado de la sesión, métricas |
 | `schema_version` | Revisión del esquema, para migraciones futuras |

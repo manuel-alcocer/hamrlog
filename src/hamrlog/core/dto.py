@@ -38,6 +38,10 @@ class QsoRow:
     repeater_call: str = ""
     antenna_name: str = ""
     digital_data: dict[str, Any] = field(default_factory=dict)
+    #: Equipment set assigned to the QSO, empty when none.
+    equipment_name: str = ""
+    #: True when the set cannot work the QSO's frequency or band.
+    equipment_mismatch: bool = False
 
     @property
     def is_manual(self) -> bool:
