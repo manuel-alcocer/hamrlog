@@ -372,3 +372,18 @@ def test_upgrading_a_v4_database_moves_antennas_to_their_own_table(tmp_path):
     assert [a.name for a in StationService.get(tm.id).antennas] == ["Diamond SG7900"]
     assert StationService.get(bare.id).antennas == []
     assert QsoService.recent()[-1].antenna_name == "Diamond SG7900"
+
+
+def test_the_engine_is_reused_when_its_url_text_is_escaped(tmp_path):
+    """A colon in the path (every Windows drive, "C:") is escaped in the URL.
+
+    Comparing the text made each call build a new engine, which on Windows
+    re-ran the catalog preseed against the real files.
+    """
+    from hamrlog.db import session as db_session
+
+    folder = tmp_path / "C:"
+    folder.mkdir()
+    url = f"sqlite:///{(folder / 'test.sqlite3').as_posix()}"
+    first = db_session.init_engine(url)
+    assert db_session.init_engine(url) is first

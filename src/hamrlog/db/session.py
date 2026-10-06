@@ -12,7 +12,7 @@ import os
 from collections.abc import Iterator
 from contextlib import contextmanager
 
-from sqlalchemy import Engine, create_engine, event, select
+from sqlalchemy import Engine, create_engine, event, make_url, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from ..paths import database_path, ensure_dirs
@@ -44,7 +44,10 @@ def init_engine(url: str | None = None, *, echo: bool = False) -> Engine:
     global _engine, _session_factory
 
     target = url or default_database_url()
-    if _engine is not None and str(_engine.url) == target:
+    # Compared as URLs, not as text: SQLAlchemy escapes the colon of a
+    # Windows drive ("C%3A"), so the text of the same URL never matched and
+    # every call built a new engine.
+    if _engine is not None and _engine.url == make_url(target):
         return _engine
 
     connect_args = {}

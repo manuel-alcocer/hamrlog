@@ -44,7 +44,13 @@ Issues = "https://github.com/manuel-alcocer/hamrlog/issues"
 metrics = ["prometheus-client>=0.20"]
 # Future REST API / web frontend. Not imported by the TUI.
 api = ["fastapi>=0.110", "uvicorn>=0.29", "pydantic>=2.0"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.5"]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.5",
+    # tomllib is only in the standard library from Python 3.11.
+    "tomli>=2.0; python_version < '3.11'",
+]
 
 [project.scripts]
 hamrlog = "hamrlog.cli:main"

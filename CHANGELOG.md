@@ -197,7 +197,11 @@ lo lea cualquier otro programa.
 - El número de versión vive en un solo sitio (`src/hamrlog/__init__.py`) y las
   pruebas comprueban que el paquete de Arch y el instalador de Windows no se
   quedan atrás.
-- 319 pruebas, 79 más que en la versión anterior.
+- En Windows la base de datos se reabría en cada acceso. SQLAlchemy escribe
+  los dos puntos de la unidad (`C:`) como `C%3A`, así que el motor abierto
+  nunca se reconocía.
+- Las pruebas vuelven a pasar con Python 3.10, que no trae `tomllib`.
+- 385 pruebas, 66 más que en la versión anterior.
 
 ## v0.1.0
 
