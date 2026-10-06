@@ -380,10 +380,16 @@ def test_the_engine_is_reused_when_its_url_text_is_escaped(tmp_path):
     Comparing the text made each call build a new engine, which on Windows
     re-ran the catalog preseed against the real files.
     """
+    import sys
+
     from hamrlog.db import session as db_session
 
-    folder = tmp_path / "C:"
-    folder.mkdir()
+    # Windows paths carry the drive already; elsewhere a folder named like
+    # one gets the same escaping.
+    folder = tmp_path
+    if sys.platform != "win32":
+        folder = tmp_path / "C:"
+        folder.mkdir()
     url = f"sqlite:///{(folder / 'test.sqlite3').as_posix()}"
     first = db_session.init_engine(url)
     assert db_session.init_engine(url) is first
