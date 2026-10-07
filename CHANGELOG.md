@@ -2,6 +2,51 @@
 
 ## Sin publicar
 
+### Teclas de función
+
+- `F1` … `F5` llevan a su sección desde cualquier otra, no solo desde el
+  registro.
+- Las pestañas (Inventario) se recorren en ciclo con `Ctrl+N`; `F5`/`F6` ya no
+  cambian de pestaña. `Mayús+RePág`/`Mayús+AvPág` siguen yendo atrás y
+  adelante.
+
+### Repetidores (`F5`)
+
+- `F5` muestra los **repetidores** en el recuadro del registro, como la
+  Agenda: número de la URE (`R5`), indicativo, salida, entrada, tono CTCSS,
+  modo, canal IARU, locator y titular. Se buscan con `/buscar` (`R5`,
+  `dmr madrid`, `IN80`…).
+- Alta y edición en la línea de entrada; la entrada admite una frecuencia o un
+  desplazamiento (`-600`, `-7.6 MHz`).
+- `Enter` sobre un repetidor lo sintoniza, como `/repetidor`.
+- **Lista de la URE**: se cargan de forma idempotente los 268 repetidores de
+  [ure.es/repetidores](https://www.ure.es/repetidores/) (10 m, 6 m, 2 m,
+  70 cm y 23 cm), que no se pueden modificar ni borrar.
+- Un indicativo puede ser varios repetidores; se elige uno con la frecuencia,
+  el modo o la banda: `/repetidor ED4ZAH DMR`, también en los perfiles.
+- Corregido: en las listas largas (Repetidores, Agenda) la fila `<Nuevo …>`
+  quedaba oculta justo debajo del borde al abrir la vista.
+- Esquema 11: el indicativo de los repetidores deja de ser único y ganan número
+  URE, canal y marca de catálogo; las bases de datos anteriores se actualizan
+  solas.
+
+### Perfiles (`F4`)
+
+- `F4` muestra los **perfiles** en el recuadro del registro, como el
+  Inventario y la Agenda. Un perfil guarda operador, equipo del Inventario,
+  frecuencia (y con ella la banda), modo, potencia, repetidor y datos del modo
+  digital (`TG=214, CC=1`).
+- `Enter` sobre un perfil lo **activa**: los QSO que se escriban en el
+  registro se guardan con sus datos, y con la emisora y la antena del equipo
+  que cubran su frecuencia.
+- Diez perfiles **principales** llevan una cifra del 0 al 9 y se activan con
+  `Ctrl+0` … `Ctrl+9` desde cualquier ventana; `/perfil 3` hace lo mismo.
+- `*` marca el perfil **predeterminado**, que se activa al arrancar.
+- La línea de estado dice `PERFIL` en lugar de `CONFIG`, y las
+  «configuraciones» pasan a llamarse perfiles en los mensajes.
+- Esquema 10: los perfiles ganan equipo, potencia y tecla; las bases de datos
+  anteriores se actualizan solas.
+
 ### Agenda (`F3`)
 
 - `F3` muestra la agenda como lista en el recuadro del registro: alta,

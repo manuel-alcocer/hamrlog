@@ -46,5 +46,5 @@ class StatusLine(Static):
         chunk(_("MODE"), self.mode or "-", mode_style)
         chunk("", self.digital_summary, "magenta")
         chunk(_("RIG"), self.station, "white")
-        chunk("CONFIG", self.profile or _("(unsaved)"), "bold blue")
+        chunk(_("PROFILE"), self.profile or _("(none)"), "bold blue")
         return text

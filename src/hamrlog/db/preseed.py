@@ -1,18 +1,22 @@
-"""The bundled catalog of current radios, antennas and power supplies.
+"""The bundled catalog: current radios, antennas, power supplies and the
+repeaters of the URE list.
 
 Every JSON file under ``hamrlog/data/preseed`` is read, whatever its name,
 so adding a catalog is dropping a file there. The files are written in
 Spanish, like the equipment they describe: each one is an object
-``{"tipo": "emisoras" | "antenas" | "fuentes", "elementos": [...]}``, or a
-bare list when the file is named after its kind (``emisoras.json``).
+``{"tipo": "emisoras" | "antenas" | "fuentes" | "repetidores",
+"elementos": [...]}``, or a bare list when the file is named after its kind
+(``emisoras.json``).
 
 Entries are loaded as ``preset`` rows: the services refuse to change or
-delete them, and they exist so that building an equipment set does not start
-with typing in every radio by hand.
+delete them, and they exist so that building an equipment set, or tuning a
+repeater, does not start with typing everything in by hand.
 
 Loading runs on every start and is idempotent: it only adds what is missing,
-matched by name regardless of case, so a newer catalog adds its new models
-and an item the operator registered under the same name keeps theirs.
+so a newer catalog adds its new entries and an item the operator registered
+under the same name keeps theirs. Equipment is matched by name regardless of
+case; a repeater by callsign and output frequency, since one callsign often
+names several repeaters.
 """
 
 from __future__ import annotations
@@ -25,8 +29,15 @@ from typing import Any
 
 from sqlalchemy import Engine, func, insert, select
 
-from ..core import bands
-from .models import Antenna, PowerSupply, Station, StationType, station_type_links
+from ..core import bands, modes, repeaters
+from .models import (
+    Antenna,
+    PowerSupply,
+    Repeater,
+    Station,
+    StationType,
+    station_type_links,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -39,8 +50,9 @@ def brand_of(entry: dict[str, Any]) -> str:
     return str(entry.get("brand") or "").strip() or str(entry["name"]).split()[0]
 
 
-#: Kinds a catalog file may hold, by the Spanish name the files use.
-KINDS = ("emisoras", "antenas", "fuentes")
+#: Kinds a catalog file may hold, by the Spanish name the files use, and the
+#: key every entry of that kind must have.
+KINDS = {"emisoras": "name", "antenas": "name", "fuentes": "name", "repetidores": "callsign"}
 
 
 def load_catalogs(folder: Any = None) -> dict[str, list[dict[str, Any]]]:
@@ -75,7 +87,7 @@ def load_catalogs(folder: Any = None) -> dict[str, list[dict[str, Any]]]:
             logger.warning("preseed: %s does not say what it holds", source.name)
             continue
         found[kind].extend(
-            entry for entry in entries if isinstance(entry, dict) and entry.get("name")
+            entry for entry in entries if isinstance(entry, dict) and entry.get(KINDS[kind])
         )
     return found
 
@@ -164,6 +176,57 @@ def apply_preseed(engine: Engine, folder: Any = None) -> int:
             )
             present.add(name.lower())
             added += 1
+
+        added += _add_repeaters(connection, catalogs["repetidores"])
     if added:
         logger.info("preseed: added %d catalog items", added)
+    return added
+
+
+def _add_repeaters(connection: Any, entries: list[dict[str, Any]]) -> int:
+    """Insert the repeaters of the list not stored yet; how many were added.
+
+    Each entry gives ``callsign``, ``output_hz`` and ``shift_hz``, and may
+    give ``mode``, ``ctcss``, ``ure``, ``channel``, ``gridsquare``, ``qth``,
+    ``name`` (who runs it), ``notes`` and ``digital``. One without an output
+    frequency is skipped.
+    """
+    present = {
+        (call.upper(), output)
+        for call, output in connection.execute(select(Repeater.callsign, Repeater.output_hz))
+    }
+    added = 0
+    for entry in entries:
+        call = str(entry["callsign"]).strip().upper()
+        try:
+            output_hz = int(entry.get("output_hz") or 0)
+            shift_hz = int(entry.get("shift_hz") or 0)
+        except (TypeError, ValueError):
+            output_hz = 0
+        if not output_hz or (call, output_hz) in present:
+            continue
+        band = bands.from_frequency(output_hz)
+        mode = modes.get(str(entry.get("mode") or "FM"))
+        digital = entry.get("digital")
+        connection.execute(
+            insert(Repeater).values(
+                callsign=call,
+                name=str(entry.get("name") or "").strip(),
+                ure_number=str(entry.get("ure") or "").strip(),
+                channel=str(entry.get("channel") or "").strip(),
+                band=band.name if band else "",
+                output_hz=output_hz,
+                input_hz=repeaters.input_frequency(output_hz, shift_hz),
+                shift_hz=shift_hz,
+                mode=mode.name if mode else "FM",
+                ctcss_tx=repeaters.normalize_tone(str(entry.get("ctcss") or "")),
+                qth=str(entry.get("qth") or "").strip(),
+                gridsquare=str(entry.get("gridsquare") or "").strip().upper(),
+                digital_data=dict(digital) if isinstance(digital, dict) else {},
+                notes=str(entry.get("notes") or "").strip(),
+                preset=True,
+            )
+        )
+        present.add((call, output_hz))
+        added += 1
     return added

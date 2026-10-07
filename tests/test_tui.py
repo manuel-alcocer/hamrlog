@@ -409,16 +409,18 @@ async def test_footer_shows_how_to_quit(operator):
     from hamrlog.i18n import _
     from hamrlog.tui.widgets.footer import HELP_HINT, StatsFooter
 
-    assert "F1 Registro · F2 Inventario · F3 Agenda · Ctrl+Q Salir" == _(HELP_HINT)
+    assert _(HELP_HINT) == (
+        "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · Ctrl+Q Salir"
+    )
     app = HamrlogApp()
-    async with app.run_test(size=(140, 30)) as pilot:
+    async with app.run_test(size=(160, 30)) as pilot:
         await pilot.pause()
         assert _(HELP_HINT) in str(app.query_one(StatsFooter).render())
     # Narrower: the keys of the views stay, the way out is in the help.
     app = HamrlogApp()
-    async with app.run_test(size=(120, 30)) as pilot:
+    async with app.run_test(size=(145, 30)) as pilot:
         await pilot.pause()
-        assert "F1 Registro · F2 Inventario · F3 Agenda" in str(
+        assert "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores" in str(
             app.query_one(StatsFooter).render()
         )
 

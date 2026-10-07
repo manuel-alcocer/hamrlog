@@ -48,6 +48,7 @@ class ContactKind(Kind):
         (N_("QSO"), None),
     )
     searchable = True
+    count_text = N_("{total} contacts")
 
     def items(self, query: str = "") -> list[Item]:
         rows = []

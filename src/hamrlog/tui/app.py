@@ -34,6 +34,9 @@ from ..db.session import init_engine
 from ..i18n import N_, _
 from .address_book import CONTACT_KINDS
 from .inventory import KINDS, Item, Kind, ListSuggester, tab_bar
+from .profiles import PROFILE_KINDS, ProfileKind
+from .profiles import legend as profile_legend
+from .repeaters import REPEATER_KINDS
 from .screens.base import ConfirmScreen, Field, FormScreen
 from .widgets.detail import DetailPanel
 from .widgets.entry import (
@@ -73,11 +76,19 @@ COMMANDS: dict[str, str] = {
 #: command typed without its value explains itself. Translated where shown.
 COMMAND_SUMMARY = N_("Commands: /band /freq /mode /profile /repeater /direct /undo /quit")
 
+#: ``/help`` and the help lines of the profiles view.
+PROFILES_SUMMARY = N_(
+    "Profiles: Enter on one activates it · * makes it the default, activated on start · "
+    "Ctrl+0…9 activate the main ones from anywhere · /profile NAME or KEY"
+)
+PROFILES_KEYS = N_("Enter add · ↑↓ list · Ctrl+0…9 activate · F1 log")
+PROFILES_BROWSE = N_("Enter activate · * default · E edit · D delete · ↓ back to typing")
+
 #: ``/help`` in the inventory view.
 INVENTORY_SUMMARY = N_("Inventory: /brand NAME filters the list · /brand alone clears the filter")
 
 #: Help line of the inventory view.
-INVENTORY_KEYS = N_("Enter add · ↑↓ list · F5/F6 tab · Alt+↑↓ brand · F1 log")
+INVENTORY_KEYS = N_("Enter add · ↑↓ list · Ctrl+N tab · Alt+↑↓ brand · F1 log")
 
 #: Help line while editing an item of the inventory view.
 INVENTORY_EDIT_KEYS = N_("Editing · Tab next field · Enter saves · Esc cancels")
@@ -92,21 +103,36 @@ CONTACTS_SUMMARY = N_(
 )
 CONTACTS_KEYS = N_("Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log")
 
+#: ``/help`` and the help lines of the repeaters view.
+REPEATERS_SUMMARY = N_(
+    "Repeaters: Enter on one tunes it · /search TEXT looks up callsign, URE number, "
+    "channel, club, place, locator or mode · /search alone shows everything"
+)
+REPEATERS_KEYS = N_("Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log")
+REPEATERS_BROWSE = N_("Enter tune · E edit · D delete · ↓ back to typing")
+
 #: The lists each list view shows, its title, and its help lines.
 LIST_VIEWS: dict[str, tuple[tuple[Kind, ...], str, str, str]] = {
     "inventory": (KINDS, N_("Inventory"), INVENTORY_KEYS, INVENTORY_SUMMARY),
     "contacts": (CONTACT_KINDS, N_("Address book"), CONTACTS_KEYS, CONTACTS_SUMMARY),
+    "profiles": (PROFILE_KINDS, N_("Profiles"), PROFILES_KEYS, PROFILES_SUMMARY),
+    "repeaters": (REPEATER_KINDS, N_("Repeaters"), REPEATERS_KEYS, REPEATERS_SUMMARY),
 }
 
+#: Action bar over an item, per list view; INVENTORY_BROWSE otherwise.
+BROWSE_PROMPTS: dict[str, str] = {"profiles": PROFILES_BROWSE, "repeaters": REPEATERS_BROWSE}
+
 #: The function key that opens each list view from the log.
-VIEW_KEYS: dict[str, str] = {"f2": "inventory", "f3": "contacts"}
+VIEW_KEYS: dict[str, str] = {
+    "f2": "inventory", "f3": "contacts", "f4": "profiles", "f5": "repeaters",
+}
 
 #: Shown when a command that needs a value is typed without one.
 COMMAND_USAGE: dict[str, str] = {
     "band": N_("Usage: /band 40m"),
     "frequency": N_("Usage: /freq 7.100"),
     "mode": N_("Usage: /mode SSB"),
-    "profiles": N_("Usage: /profile name"),
+    "profiles": N_("Usage: /profile NAME, or /profile 3 for the one on Ctrl+3"),
     "repeater": N_("Usage: /repeater CALLSIGN · /direct to go back to simplex"),
 }
 
@@ -141,8 +167,15 @@ class HamrlogApp(App[None]):
                 priority=True, show=False),
         Binding("shift+pagedown", "function_key('shift+pagedown')", N_("Next tab"),
                 priority=True, show=False),
+        Binding("ctrl+n", "function_key('ctrl+n')", N_("Next tab"), priority=True, show=False),
         Binding("alt+up", "cycle_brand(-1)", N_("Previous brand"), priority=True, show=False),
         Binding("alt+down", "cycle_brand(1)", N_("Next brand"), priority=True, show=False),
+        # The ten main profiles, from any view.
+        *(
+            Binding(f"ctrl+{slot}", f"activate_slot({slot})", N_("Activate profile"),
+                    priority=True, show=False)
+            for slot in range(10)
+        ),
         Binding("ctrl+d", "delete_qso", N_("Delete QSO"), priority=True),
         Binding("ctrl+a", "mark_all", N_("Select all"), priority=True, show=False),
         Binding("escape", "back_to_entry", N_("Back to typing"), show=False),
@@ -209,13 +242,16 @@ class HamrlogApp(App[None]):
             self.call_after_refresh(self._first_run_wizard)
 
     def _load_initial_state(self) -> None:
-        """Restore the previous session, falling back to the default profile."""
+        """Restore the previous session, then activate the default profile."""
         self.state = SettingsService.load_state()
 
-        if not self.state.band and not self.state.freq_hz:
-            default_profile = ProfileService.get_default()
-            if default_profile is not None:
-                ProfileService.apply_to_state(default_profile.id, self.state)
+        default_profile = ProfileService.get_default()
+        if default_profile is not None:
+            ProfileService.apply_to_state(default_profile.id, self.state)
+        elif self.state.profile_id is not None:
+            # Still active from the last run, unless it was deleted since.
+            if ProfileService.get(self.state.profile_id) is None:
+                self.state.leave_profile()
 
         # The stored operator may have been removed since the last run.
         if self.state.operator_id is not None:
@@ -333,7 +369,12 @@ class HamrlogApp(App[None]):
         )
 
     def _equipment_summary(self) -> str:
-        """Rig, antenna and power in use, empty without a station."""
+        """The setup in use, or the rig, antenna and power; empty without them."""
+        setup = (
+            EquipmentService.get(self.state.equipment_id) if self.state.equipment_id else None
+        )
+        if setup is not None:
+            return setup.name
         station = StationService.get(self.state.station_id) if self.state.station_id else None
         if station is None:
             return ""
@@ -639,7 +680,7 @@ class HamrlogApp(App[None]):
             panel.feedback(_("Unknown band: «{band}»").format(band=band_name), "error")
             return
         self.state.set_band(band.name)
-        self.state.profile_name = ""
+        self.state.leave_profile()
         self._refresh_status()
         panel.feedback(
             _("Band {band} · {freq}").format(
@@ -651,7 +692,7 @@ class HamrlogApp(App[None]):
 
     def _apply_frequency(self, freq_hz: int) -> None:
         self.state.set_frequency(freq_hz)
-        self.state.profile_name = ""
+        self.state.leave_profile()
         self._refresh_status()
         panel = self.query_one(EntryPanel)
         freq = bands.format_frequency(freq_hz)
@@ -671,7 +712,7 @@ class HamrlogApp(App[None]):
             panel.feedback(_("Unknown mode: «{mode}»").format(mode=mode_name), "error")
             return
         self.state.set_mode(mode.name)
-        self.state.profile_name = ""
+        self.state.leave_profile()
         self._refresh_status()
         if mode.digital_fields:
             self._ask_digital_fields(mode)
@@ -713,7 +754,7 @@ class HamrlogApp(App[None]):
         except ServiceError as exc:
             panel.feedback(str(exc), "error")
             return
-        self.state.profile_name = ""
+        self.state.leave_profile()
         self._refresh_status()
         repeater = RepeaterService.get(repeater_id)
         if repeater is not None:
@@ -739,7 +780,7 @@ class HamrlogApp(App[None]):
             panel.focus_input()
             return
         self.state.clear_repeater()
-        self.state.profile_name = ""
+        self.state.leave_profile()
         self._refresh_status()
         panel.feedback(
             _("Direct on {freq} (simplex)").format(
@@ -750,30 +791,64 @@ class HamrlogApp(App[None]):
         panel.focus_input()
 
     def _load_repeater_by_callsign(self, call: str) -> None:
-        """Support ``/repeater ED7ZAE`` without opening the list."""
+        """``/repeater ED7ZAE``; ``/repeater ED4ZAH DMR`` when a callsign names several."""
         panel = self.query_one(EntryPanel)
-        repeater = RepeaterService.get_by_callsign(call)
-        if repeater is None:
-            panel.feedback(
-                _("No repeater registered with the callsign «{call}»").format(call=call),
-                "error",
-            )
+        try:
+            repeater = RepeaterService.resolve(call)
+        except ServiceError as exc:
+            panel.feedback(str(exc), "error")
             return
         self._apply_repeater(repeater.id)
 
     def _load_profile_by_name(self, name: str) -> None:
-        """Support ``/profile HF-Casa`` without opening the selector."""
+        """``/profile HF-Casa``, or ``/profile 3`` for the one on Ctrl+3."""
         panel = self.query_one(EntryPanel)
         needle = name.strip().lower()
+        if needle.isdigit() and len(needle) == 1:
+            self.action_activate_slot(int(needle))
+            return
         for profile in ProfileService.list_all():
             if profile.name.lower() == needle:
-                ProfileService.apply_to_state(profile.id, self.state)
-                self._refresh_status()
-                panel.feedback(
-                    _("Profile «{name}» loaded").format(name=profile.name), "ok"
-                )
+                self._activate_profile(profile.id)
                 return
         panel.feedback(_("There is no profile «{name}»").format(name=name), "error")
+
+    def action_activate_slot(self, slot: int) -> None:
+        """Ctrl+0 to Ctrl+9: activate the profile holding that key."""
+        if self._modal_open:
+            raise SkipAction()
+        profile = ProfileService.get_by_slot(slot)
+        if profile is None:
+            self.query_one(EntryPanel).feedback(
+                _("No profile has the key Ctrl+{key}; give it one in Profiles (F4).").format(
+                    key=slot
+                ),
+                "warning",
+            )
+            return
+        self._activate_profile(profile.id)
+
+    def _activate_profile(self, profile_id: int) -> None:
+        """Make a profile the active one: every new QSO inherits it."""
+        panel = self.query_one(EntryPanel)
+        try:
+            ProfileService.apply_to_state(profile_id, self.state)
+        except ServiceError as exc:
+            panel.feedback(str(exc), "error")
+            return
+        self._refresh_status()
+        if self._view == "profiles" and self._editing_id is None:
+            item = self.query_one(ItemTable).selected_item()
+            self._reload_items(keep_id=item.id if item else None)
+            # The reload lands on the same row: this message must stay.
+            self._showing_selection = False
+        panel.feedback(
+            _("Profile «{name}» active: new QSOs are logged with it").format(
+                name=self.state.profile_name
+            ),
+            "ok",
+        )
+        panel.focus_input()
 
     async def action_back_to_entry(self) -> None:
         """Escape leaves the list and returns to the insert row.
@@ -802,7 +877,7 @@ class HamrlogApp(App[None]):
             return
         history = self.query_one(HistoryPanel)
         row = history.selected_row()
-        if row is None:
+        if row is None or event.action in ("activate", "default"):
             return
         if event.action == "delete":
             self._confirm_delete(row.id)
@@ -943,7 +1018,7 @@ class HamrlogApp(App[None]):
         """Remind the operator that the line is not a text field right now."""
         if self._view in LIST_VIEWS:
             self.query_one(EntryPanel).feedback(
-                _("You are on an item of the list: {keys}").format(keys=_(INVENTORY_BROWSE)),
+                _("You are on an item of the list: {keys}").format(keys=_(self._browse_prompt)),
                 "warning",
             )
             return
@@ -1190,35 +1265,39 @@ class HamrlogApp(App[None]):
     def _draft_key(self) -> str:
         return "log" if self._view == "log" else self._kind.key
 
-    async def action_function_key(self, key: str) -> None:
-        """F1 to F12 and the page keys: each view gives them its meaning.
+    @property
+    def _browse_prompt(self) -> str:
+        """What the action bar offers over an item of the list view in use."""
+        return BROWSE_PROMPTS.get(self._view, INVENTORY_BROWSE)
 
-        F1 is the log from anywhere, and in the log F2 opens the inventory
-        view (where it does nothing yet). Page Up and Page Down page through
-        the list of whichever view is showing; in the inventory, F5/F6 and
-        Shift+Page Up/Down change tab. Over a dialog the key is passed on to
-        it.
+    async def action_function_key(self, key: str) -> None:
+        """Function keys, page keys and tab keys.
+
+        Each function key opens its view from any other (F1 the log, F2 the
+        inventory...); the one of the view in use, or one no view has, does
+        nothing. Page Up and Page Down page through the list in view. Ctrl+N
+        cycles through the tabs of a view that has them, and Shift+Page
+        Up/Down go back and forth. Over a dialog the key is passed on to it.
         """
         if self._modal_open:
             raise SkipAction()
-        if key == "f1":
-            if self._view != "log":
-                await self._show_view("log")
+        if key == "f1" or key in VIEW_KEYS:
+            view = "log" if key == "f1" else VIEW_KEYS[key]
+            if view != self._view:
+                await self._show_view(view)
             return
         if key in ("pageup", "pagedown"):
             if self._editing_id is None:
                 self._page(-1 if key == "pageup" else 1)
             return
         if self._view == "log":
-            if key in VIEW_KEYS:
-                await self._show_view(VIEW_KEYS[key])
             return
         tabs = len(self._kinds)
         if tabs < 2:
             return
-        if key in ("f5", "shift+pageup"):
+        if key == "shift+pageup":
             await self._show_view(self._view, (self._tab - 1) % tabs)
-        elif key in ("f6", "shift+pagedown"):
+        elif key in ("ctrl+n", "shift+pagedown"):
             await self._show_view(self._view, (self._tab + 1) % tabs)
 
     def _page(self, direction: int) -> None:
@@ -1262,7 +1341,7 @@ class HamrlogApp(App[None]):
             self._refresh_detail(None)
         else:
             panel.build_fields(self._kind.fields, extra=(), second=self._kind.second_row)
-            panel.set_browse_prompt(INVENTORY_BROWSE)
+            panel.set_browse_prompt(self._browse_prompt)
             panel.edit_keys = INVENTORY_EDIT_KEYS
             panel.set_base_keys(LIST_VIEWS[view][2])
             self._reload_items()
@@ -1278,6 +1357,8 @@ class HamrlogApp(App[None]):
 
     def _reload_items(self, keep_id: int | None = None) -> None:
         kind = self._kind
+        if isinstance(kind, ProfileKind):
+            kind.active_id = self.state.profile_id
         query = self._queries.get(kind.key, "")
         items = kind.items(query)
         brand = self._brands.get(kind.key, "")
@@ -1285,7 +1366,9 @@ class HamrlogApp(App[None]):
             items = [item for item in items if item.brand.lower() == brand.lower()]
         total = kind.total(query) if kind.searchable else len(items)
         self.query_one(InventoryView).set_tabs(
-            tab_bar(self._kinds, self._tab, brand, query, len(items), total)
+            profile_legend()
+            if isinstance(kind, ProfileKind)
+            else tab_bar(self._kinds, self._tab, brand, query, len(items), total)
         )
         self.query_one(ItemTable).show(kind, items, keep_id)
 
@@ -1293,7 +1376,9 @@ class HamrlogApp(App[None]):
         """``/search TEXT``: narrow a searchable list; alone, show all of it."""
         panel = self.query_one(EntryPanel)
         if self._view not in LIST_VIEWS or not self._kind.searchable:
-            panel.feedback(_("/search is for the address book (F3)."), "warning")
+            panel.feedback(
+                _("/search is for the address book (F3) and the repeaters (F5)."), "warning"
+            )
             return
         self._queries[self._kind.key] = text.strip()
         self._reload_items()
@@ -1328,24 +1413,41 @@ class HamrlogApp(App[None]):
         panel = self.query_one(EntryPanel)
         if item is None:
             return
-        if action == "mark":
+        profiles = self._view == "profiles"
+        if action == "activate":
+            if profiles:
+                self._activate_profile(item.id)
+            elif self._view == "repeaters":
+                self._apply_repeater(item.id)
+            return
+        if action == "default" and profiles:
+            self._toggle_default(item)
+            return
+        if action in ("mark", "default"):
             panel.feedback(
-                _("Nothing to select here: {keys}").format(keys=_(INVENTORY_BROWSE)), "warning"
+                _("Nothing to select here: {keys}").format(keys=_(self._browse_prompt)),
+                "warning",
             )
             return
         if action == "repeat":
             panel.feedback(
-                _("Nothing to repeat here: {keys}").format(keys=_(INVENTORY_BROWSE)), "warning"
+                _("Nothing to repeat here: {keys}").format(keys=_(self._browse_prompt)),
+                "warning",
             )
             return
         if item.locked:
-            panel.feedback(
+            message = (
                 _(
+                    "{name} is from the URE list: it is neither changed nor deleted. "
+                    "Enter tunes it."
+                )
+                if self._view == "repeaters"
+                else _(
                     "«{name}» is from the catalog: it is neither changed nor deleted. "
                     "Use it when putting a setup together."
-                ).format(name=item.name),
-                "warning",
+                )
             )
+            panel.feedback(message.format(name=item.name), "warning")
             return
         if action == "edit":
             self._editing_id = item.id
@@ -1364,6 +1466,20 @@ class HamrlogApp(App[None]):
                 lambda confirmed: self._do_delete_item(item, confirmed),
             )
 
+    def _toggle_default(self, item: Item) -> None:
+        """``*``: the profile activated on start, or none if it already was."""
+        panel = self.query_one(EntryPanel)
+        default = ProfileService.get_default()
+        if default is not None and default.id == item.id:
+            ProfileService.clear_default()
+            message = _("No profile is activated on start now.")
+        else:
+            ProfileService.set_default(item.id)
+            message = _("«{name}» is activated on start.").format(name=item.name)
+        self._reload_items(keep_id=item.id)
+        self._showing_selection = False
+        panel.feedback(message, "ok")
+
     def _do_delete_item(self, item: Item, confirmed: bool | None) -> None:
         panel = self.query_one(EntryPanel)
         if confirmed:
@@ -1373,6 +1489,9 @@ class HamrlogApp(App[None]):
                 panel.feedback(str(exc), "error")
                 panel.focus_input()
                 return
+            if self._view == "profiles" and item.id == self.state.profile_id:
+                # Its values stay in use; they just belong to no profile now.
+                self.state.leave_profile()
             self._reload_items()
             self._refresh_status()
             panel.feedback(_("«{name}» deleted.").format(name=item.name), "ok")
@@ -1388,6 +1507,9 @@ class HamrlogApp(App[None]):
             return
         if item_id is not None:
             self._end_edit()
+            if self._view == "profiles" and item_id == self.state.profile_id:
+                # The QSOs logged from now on take the new values.
+                ProfileService.apply_to_state(item_id, self.state)
             self._reload_items(keep_id=item_id)
             panel.feedback(_("✓ «{name}» updated").format(name=name), "ok")
         else:

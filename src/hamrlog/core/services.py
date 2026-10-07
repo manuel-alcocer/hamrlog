@@ -273,6 +273,21 @@ class StationService:
             )
 
 
+def _callsign_and_output(repeater: Repeater) -> str:
+    """«ED4ZAH 438.325»: a repeater whose callsign names others too."""
+    return f"{repeater.callsign} {bands.format_frequency(repeater.output_hz, with_unit=False)}"
+
+
+def _refuse_preset_repeater(repeater: Repeater) -> None:
+    """Repeaters of the URE list are reference data, like the equipment catalog."""
+    if repeater.preset:
+        raise ServiceError(
+            _("{call} comes from the URE list: it cannot be changed or deleted.").format(
+                call=repeater.callsign
+            )
+        )
+
+
 def _refuse_preset(item: Any, what: str) -> None:
     """Catalog items are shared reference data: never changed or deleted.
 
@@ -658,6 +673,9 @@ class EquipmentService:
             session.query(Qso).filter(Qso.equipment_id == equipment_id).update(
                 {"equipment_id": None}
             )
+            session.query(Profile).filter(Profile.equipment_id == equipment_id).update(
+                {"equipment_id": None}
+            )
             session.delete(equipment)
 
 
@@ -742,7 +760,11 @@ def _type_named(session: Any, name: str) -> StationType | None:
 # --------------------------------------------------------------------------- #
 
 class RepeaterService:
-    """Repeaters the operator works through."""
+    """Repeaters the operator works through.
+
+    A callsign may name several repeaters (one club, several bands or modes),
+    so a repeater is told apart by its callsign and output frequency.
+    """
 
     @staticmethod
     def list_all(include_inactive: bool = False) -> list[Repeater]:
@@ -753,16 +775,145 @@ class RepeaterService:
             return list(session.scalars(stmt))
 
     @staticmethod
+    def search(text: str = "", *, limit: int = 1000) -> list[Repeater]:
+        """By callsign, URE number, channel, who runs it, place, locator or mode.
+
+        Every word must match somewhere, so «R5 Madrid» or «DMR IN80» narrow
+        the list down. Ordered by callsign, then output frequency.
+        """
+        with session_scope() as session:
+            stmt = (
+                select(Repeater)
+                .order_by(Repeater.callsign, Repeater.output_hz)
+                .limit(limit)
+            )
+            for word in text.split():
+                pattern = f"%{word}%"
+                stmt = stmt.where(
+                    or_(
+                        Repeater.callsign.ilike(pattern),
+                        func.lower(Repeater.ure_number) == word.lower(),
+                        Repeater.channel.ilike(pattern),
+                        Repeater.name.ilike(pattern),
+                        Repeater.qth.ilike(pattern),
+                        Repeater.gridsquare.ilike(f"{word}%"),
+                        Repeater.mode.ilike(word.replace("-", "")),
+                        Repeater.band.ilike(word),
+                        Repeater.notes.ilike(pattern),
+                    )
+                )
+            return list(session.scalars(stmt))
+
+    @staticmethod
+    def count(text: str = "") -> int:
+        """How many repeaters match ``text`` the way ``search`` reads it."""
+        return len(RepeaterService.search(text, limit=100_000))
+
+    @staticmethod
     def get(repeater_id: int) -> Repeater | None:
         with session_scope() as session:
             return session.get(Repeater, repeater_id)
 
     @staticmethod
     def get_by_callsign(call: str) -> Repeater | None:
+        """The first repeater with that callsign; see ``resolve`` for the rest."""
+        found = RepeaterService.with_callsign(call)
+        return found[0] if found else None
+
+    @staticmethod
+    def with_callsign(call: str) -> list[Repeater]:
+        """Every repeater with that callsign, by output frequency."""
         with session_scope() as session:
-            return session.scalars(
-                select(Repeater).where(Repeater.callsign == callsign_module.normalize(call))
-            ).first()
+            return list(
+                session.scalars(
+                    select(Repeater)
+                    .where(Repeater.callsign == callsign_module.normalize(call))
+                    .order_by(Repeater.output_hz)
+                )
+            )
+
+    @staticmethod
+    def label(repeater: Repeater) -> str:
+        """How the operator names it: the callsign, plus the output when shared.
+
+        ``resolve`` reads it back, so a profile edited and saved keeps its
+        repeater.
+        """
+        if len(RepeaterService.with_callsign(repeater.callsign)) > 1:
+            return _callsign_and_output(repeater)
+        return repeater.callsign
+
+    @staticmethod
+    def labels() -> list[str]:
+        """The label of every repeater, for completion."""
+        everything = RepeaterService.search(limit=100_000)
+        counts: dict[str, int] = {}
+        for repeater in everything:
+            counts[repeater.callsign] = counts.get(repeater.callsign, 0) + 1
+        shared = {call for call, count in counts.items() if count > 1}
+        return [
+            _callsign_and_output(r) if r.callsign in shared else r.callsign for r in everything
+        ]
+
+    @staticmethod
+    def resolve(text: str) -> Repeater:
+        """The repeater the operator means: «ED7ZAE», «ED4ZAH 438.325», «ED4ZAH DMR».
+
+        After the callsign may come its output frequency, its mode or its
+        band, which pick one when the callsign names several.
+
+        Raises:
+            ServiceError: no repeater has that callsign, or several fit.
+        """
+        call, _sep, rest = text.strip().partition(" ")
+        found = RepeaterService.with_callsign(call)
+        if not found:
+            raise ServiceError(
+                _("No repeater registered with the callsign «{call}»").format(call=call)
+            )
+        hint = rest.strip()
+        if hint:
+            mode = modes.get(hint)
+            freq_hz = bands.parse_frequency(hint)
+            found = [
+                r
+                for r in found
+                if (freq_hz is not None and r.output_hz == freq_hz)
+                or (mode is not None and r.mode == mode.name)
+                or r.band.lower() == hint.lower()
+            ]
+            if not found:
+                raise ServiceError(
+                    _("No repeater {call} matches «{hint}»").format(
+                        call=callsign_module.normalize(call), hint=hint
+                    )
+                )
+        if len(found) > 1:
+            message = _("{call} names {count} repeaters; add the frequency or the mode: {options}")
+            raise ServiceError(
+                message.format(
+                    call=found[0].callsign,
+                    count=len(found),
+                    options=", ".join(f"{_callsign_and_output(r)} ({r.mode})" for r in found),
+                )
+            )
+        return found[0]
+
+    @staticmethod
+    def _check_unique(
+        session: Any, callsign: str, output_hz: int, exclude_id: int | None = None
+    ) -> None:
+        stmt = select(Repeater.id).where(
+            Repeater.callsign == callsign, Repeater.output_hz == output_hz
+        )
+        if exclude_id is not None:
+            stmt = stmt.where(Repeater.id != exclude_id)
+        if session.scalars(stmt).first() is not None:
+            raise ServiceError(
+                _("Repeater {call} already exists on {freq}.").format(
+                    call=callsign, freq=bands.format_frequency(output_hz)
+                )
+            )
 
     @staticmethod
     def create(
@@ -771,12 +922,15 @@ class RepeaterService:
         name: str = "",
         output_hz: int | None = None,
         shift_hz: int | None = None,
+        input_hz: int | None = None,
         mode: str = "FM",
         ctcss_tx: str = "",
         ctcss_rx: str = "",
         dcs: str = "",
         qth: str = "",
         gridsquare: str = "",
+        ure_number: str = "",
+        channel: str = "",
         digital_data: dict[str, str] | None = None,
         notes: str = "",
     ) -> Repeater:
@@ -785,11 +939,14 @@ class RepeaterService:
         Args:
             callsign_text: Repeater callsign, e.g. "ED7ZAE".
             output_hz: Frequency it transmits on, the one you tune.
-            shift_hz: Offset to its input. When omitted, the conventional
-                shift for the band is used.
+            shift_hz: Offset to its input. When omitted, ``input_hz`` sets
+                it, and without that the conventional shift for the band.
+            input_hz: Frequency it listens on, the one you transmit on.
+            ure_number: The number the URE gives it, e.g. "R5".
 
         Raises:
-            ServiceError: On a duplicate callsign or a missing frequency.
+            ServiceError: On a callsign already registered on that output,
+                or a missing frequency.
         """
         normalized = callsign_module.normalize(callsign_text)
         if not normalized:
@@ -800,16 +957,17 @@ class RepeaterService:
         band = bands.from_frequency(output_hz)
         band_name = band.name if band else ""
         if shift_hz is None:
-            shift_hz = repeaters.default_shift(band_name)
+            shift_hz = (
+                input_hz - output_hz if input_hz else repeaters.default_shift(band_name)
+            )
 
         with session_scope() as session:
-            if session.scalars(select(Repeater).where(Repeater.callsign == normalized)).first():
-                raise ServiceError(
-                    _("Repeater {call} already exists.").format(call=normalized)
-                )
+            RepeaterService._check_unique(session, normalized, output_hz)
             repeater = Repeater(
                 callsign=normalized,
                 name=name.strip(),
+                ure_number=ure_number.strip().upper(),
+                channel=channel.strip().upper(),
                 band=band_name,
                 output_hz=output_hz,
                 input_hz=repeaters.input_frequency(output_hz, shift_hz),
@@ -829,27 +987,43 @@ class RepeaterService:
 
     @staticmethod
     def update(repeater_id: int, **changes: Any) -> Repeater:
-        """Update a repeater, keeping band, input and shift consistent."""
+        """Update a repeater, keeping band, input and shift consistent.
+
+        ``input_hz`` may be given instead of ``shift_hz``: the shift follows.
+
+        Raises:
+            ServiceError: it is not there, it comes from the URE list, or
+                its callsign and output are another repeater's.
+        """
         with session_scope() as session:
             repeater = session.get(Repeater, repeater_id)
             if repeater is None:
                 raise ServiceError(_("Repeater not found."))
+            _refuse_preset_repeater(repeater)
 
             if "callsign" in changes:
                 changes["callsign"] = callsign_module.normalize(str(changes["callsign"]))
+                if not changes["callsign"]:
+                    raise ServiceError(_("The repeater callsign cannot be empty."))
             for key in ("ctcss_tx", "ctcss_rx"):
                 if key in changes:
                     changes[key] = repeaters.normalize_tone(str(changes[key]))
+            input_hz = changes.pop("input_hz", None)
 
             for key, value in changes.items():
                 if hasattr(repeater, key):
                     setattr(repeater, key, value)
 
             if repeater.output_hz:
+                if input_hz:
+                    repeater.shift_hz = input_hz - repeater.output_hz
                 band = bands.from_frequency(repeater.output_hz)
                 repeater.band = band.name if band else ""
                 repeater.input_hz = repeaters.input_frequency(
                     repeater.output_hz, repeater.shift_hz or 0
+                )
+                RepeaterService._check_unique(
+                    session, repeater.callsign, repeater.output_hz, exclude_id=repeater.id
                 )
             session.flush()
             return repeater
@@ -865,6 +1039,7 @@ class RepeaterService:
             repeater = session.get(Repeater, repeater_id)
             if repeater is None:
                 raise ServiceError(_("Repeater not found."))
+            _refuse_preset_repeater(repeater)
             session.query(Qso).filter(Qso.repeater_id == repeater_id).update(
                 {"repeater_id": None}
             )
@@ -896,28 +1071,103 @@ class RepeaterService:
 # --------------------------------------------------------------------------- #
 
 class ProfileService:
-    """Saved configurations, assigned to stations and recalled with /perfil.
+    """Profiles: what every QSO inherits while one of them is active.
 
-    The operator calls them «configuraciones»; the name ``Profile`` predates
-    the split between stations and what is tuned on them.
+    A profile holds the operator, the setup, the frequency, the mode, the
+    power, the repeater and the digital values. Ten of them can take the keys
+    Ctrl+0 to Ctrl+9, and one can be the default, activated on start.
     """
+
+    #: The keys a main profile can take.
+    SLOTS = range(10)
 
     @staticmethod
     def _query():  # type: ignore[no-untyped-def]
         return select(Profile).options(
             joinedload(Profile.operator),
             joinedload(Profile.repeater),
+            joinedload(Profile.equipment).options(*_EQUIPMENT_PARTS),
             selectinload(Profile.stations),
         )
 
     @staticmethod
     def list_all() -> list[Profile]:
+        """The main profiles by their key, then the rest by name."""
         with session_scope() as session:
             return list(
                 session.scalars(
-                    ProfileService._query().order_by(Profile.is_default.desc(), Profile.name)
-                )
+                    ProfileService._query().order_by(
+                        Profile.slot.is_(None), Profile.slot, Profile.name
+                    )
+                ).unique()
             )
+
+    @staticmethod
+    def get_by_slot(slot: int) -> Profile | None:
+        with session_scope() as session:
+            return session.scalars(
+                ProfileService._query().where(Profile.slot == slot)
+            ).first()
+
+    @staticmethod
+    def save(
+        profile_id: int | None,
+        *,
+        name: str,
+        slot: int | None = None,
+        operator_id: int | None = None,
+        equipment_id: int | None = None,
+        repeater_id: int | None = None,
+        freq_hz: int | None = None,
+        mode: str = "",
+        power_w: int | None = None,
+        digital_data: dict[str, str] | None = None,
+    ) -> Profile:
+        """Create (``profile_id`` None) or update a profile.
+
+        The band follows from the frequency. A key already held by another
+        profile moves to this one: there is only one Ctrl+<slot>.
+
+        Raises:
+            ServiceError: empty or repeated name, or a key outside 0-9.
+        """
+        clean = name.strip()
+        if not clean:
+            raise ServiceError(_("The profile name cannot be empty."))
+        if slot is not None and slot not in ProfileService.SLOTS:
+            raise ServiceError(_("The key of a profile goes from 0 to 9."))
+        with session_scope() as session:
+            other = session.scalars(select(Profile).where(Profile.name == clean)).first()
+            if other is not None and other.id != profile_id:
+                raise ServiceError(_("The profile «{name}» already exists.").format(name=clean))
+            if profile_id is None:
+                profile = Profile(name=clean)
+                session.add(profile)
+                session.flush()
+            else:
+                profile = session.get(Profile, profile_id)
+                if profile is None:
+                    raise ServiceError(_("Profile not found."))
+            if slot is not None:
+                session.query(Profile).filter(
+                    Profile.slot == slot, Profile.id != profile.id
+                ).update({"slot": None})
+            found = bands.from_frequency(freq_hz) if freq_hz else None
+            profile.name = clean
+            profile.slot = slot
+            profile.operator_id = operator_id
+            profile.equipment_id = equipment_id
+            profile.repeater_id = repeater_id
+            profile.freq_hz = freq_hz
+            profile.band = found.name if found else ""
+            profile.mode = mode
+            profile.power_w = power_w
+            profile.digital_data = dict(digital_data or {})
+            session.flush()
+            profile_id = profile.id
+        saved = ProfileService.get(profile_id)
+        assert saved is not None
+        return saved
 
     @staticmethod
     def get(profile_id: int) -> Profile | None:
@@ -981,13 +1231,11 @@ class ProfileService:
         """
         clean = name.strip()
         if not clean:
-            raise ServiceError(_("The configuration name cannot be empty."))
+            raise ServiceError(_("The profile name cannot be empty."))
         with session_scope() as session:
             profile = session.scalars(select(Profile).where(Profile.name == clean)).first()
             if profile is not None and not overwrite:
-                raise ServiceError(
-                    _("The configuration «{name}» already exists.").format(name=clean)
-                )
+                raise ServiceError(_("The profile «{name}» already exists.").format(name=clean))
             station = _station_for_assignment(session, station_id) if station_id else None
             if station is not None:
                 _check_covers(station, clean, state.freq_hz)
@@ -1006,6 +1254,8 @@ class ProfileService:
             profile.band = state.band
             profile.freq_hz = state.freq_hz
             profile.mode = state.mode
+            profile.power_w = state.power_w
+            profile.equipment_id = state.equipment_id
             profile.digital_data = dict(state.digital_data)
             profile.field_order = list(state.field_order)
             profile.separator = state.separator
@@ -1018,16 +1268,14 @@ class ProfileService:
     def rename(profile_id: int, name: str) -> Profile:
         clean = name.strip()
         if not clean:
-            raise ServiceError(_("The configuration name cannot be empty."))
+            raise ServiceError(_("The profile name cannot be empty."))
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError(_("Configuration not found."))
+                raise ServiceError(_("Profile not found."))
             other = session.scalars(select(Profile).where(Profile.name == clean)).first()
             if other is not None and other.id != profile_id:
-                raise ServiceError(
-                    _("The configuration «{name}» already exists.").format(name=clean)
-                )
+                raise ServiceError(_("The profile «{name}» already exists.").format(name=clean))
             profile.name = clean
             session.flush()
             return profile
@@ -1043,7 +1291,7 @@ class ProfileService:
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError(_("Configuration not found."))
+                raise ServiceError(_("Profile not found."))
             station = _station_for_assignment(session, station_id)
             _check_covers(station, profile.name, profile.freq_hz)
             if station not in profile.stations:
@@ -1068,15 +1316,15 @@ class ProfileService:
         station_id: int | None = None,
         antenna_id: int | None = None,
     ) -> SessionState:
-        """Overwrite ``state`` in place with a stored configuration.
+        """Make a profile the active one: overwrite ``state`` in place.
 
-        The station and antenna are only changed when a station is given: a
-        configuration is shared between stations, so on its own it does not
-        say which.
+        With a setup, the station and antenna are the ones of the set that
+        suit the frequency. Without one they only change when a station is
+        given.
         """
         profile = ProfileService.get(profile_id)
         if profile is None:
-            raise ServiceError(_("Configuration not found."))
+            raise ServiceError(_("Profile not found."))
         state.operator_id = profile.operator_id or state.operator_id
         if station_id is not None:
             state.station_id = station_id
@@ -1084,7 +1332,13 @@ class ProfileService:
         state.band = profile.band
         state.freq_hz = profile.freq_hz
         state.mode = profile.mode or modes.DEFAULT_MODE
+        state.power_w = profile.power_w
         state.digital_data = dict(profile.digital_data or {})
+        state.equipment_id = profile.equipment_id
+        if profile.equipment is not None:
+            station, antenna = profile.equipment.parts_for(profile.freq_hz, profile.band)
+            state.station_id = station.id if station else None
+            state.antenna_id = antenna.id if antenna else None
         # The repeater is restored last so it is not cleared by the fields
         # above, and only when it still exists.
         state.clear_repeater()
@@ -1096,8 +1350,15 @@ class ProfileService:
                 state.freq_tx_hz = repeater.input_hz
         state.field_order = tuple(profile.field_order) if profile.field_order else state.field_order
         state.separator = profile.separator or ","
+        state.profile_id = profile.id
         state.profile_name = profile.name
         return state
+
+    @staticmethod
+    def clear_default() -> None:
+        """No profile is activated on start any more."""
+        with session_scope() as session:
+            session.query(Profile).update({"is_default": False})
 
     @staticmethod
     def set_default(profile_id: int) -> None:
@@ -1105,7 +1366,7 @@ class ProfileService:
             session.query(Profile).update({"is_default": False})
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError(_("Configuration not found."))
+                raise ServiceError(_("Profile not found."))
             profile.is_default = True
 
     @staticmethod
@@ -1113,7 +1374,7 @@ class ProfileService:
         with session_scope() as session:
             profile = session.get(Profile, profile_id)
             if profile is None:
-                raise ServiceError(_("Configuration not found."))
+                raise ServiceError(_("Profile not found."))
             session.delete(profile)
 
 
@@ -1382,10 +1643,29 @@ class QsoService:
         freq_tx_hz = None if overridden else state.freq_tx_hz
 
         with session_scope() as session:
+            station_id, antenna_id = state.station_id, state.antenna_id
+            equipment = (
+                session.scalars(
+                    select(Equipment)
+                    .options(*_EQUIPMENT_PARTS)
+                    .where(Equipment.id == state.equipment_id)
+                ).first()
+                if state.equipment_id is not None
+                else None
+            )
+            if equipment is not None:
+                # As when a setup is assigned by hand: the radio and antenna
+                # of the set that suit this QSO.
+                station, antenna = equipment.parts_for(
+                    int(freq_hz) if freq_hz else None, band
+                )
+                station_id = station.id if station else None
+                antenna_id = antenna.id if antenna else None
             qso = Qso(
                 operator_id=state.operator_id,
-                station_id=state.station_id,
-                antenna_id=state.antenna_id,
+                station_id=station_id,
+                antenna_id=antenna_id,
+                equipment_id=equipment.id if equipment else None,
                 repeater_id=repeater_id,
                 repeater_call=repeater_call,
                 call=callsign_module.normalize(call_raw),
@@ -1402,7 +1682,7 @@ class QsoService:
                 gridsquare=str(fields.get("gridsquare", "")),
                 country=str(fields.get("country") or callsign_module.country_for(call_raw)),
                 comment=str(fields.get("comment", "")),
-                power_w=fields.get("power_w"),
+                power_w=fields.get("power_w", state.power_w),
                 entry_mode=entry_mode,
                 digital_data=merged_digital,
                 extra=dict(fields.get("extra", {}) or {}),

@@ -13,10 +13,15 @@ from ...i18n import N_, _
 
 #: Shown at the right edge, so the menus and the way out stay discoverable.
 #: Translated where it is drawn.
-HELP_HINT = N_("F1 Log · F2 Inventory · F3 Address book · Ctrl+Q Quit")
+HELP_HINT = N_(
+    "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · Ctrl+Q Quit"
+)
 
 #: What is left of it when the terminal cannot hold the whole hint.
-SHORT_HINTS = (N_("F1 Log · F2 Inventory · F3 Address book"), N_("F1 · F2 · F3"))
+SHORT_HINTS = (
+    N_("F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters"),
+    N_("F1 · F2 · F3 · F4 · F5"),
+)
 
 
 class StatsFooter(Static):

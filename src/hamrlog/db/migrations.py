@@ -122,6 +122,22 @@ def upgrade_data(engine: Engine, previous_version: int | None) -> None:
         _make_an_equipment_set_per_station(engine)
     if previous_version is not None and previous_version < 7:
         _english_country_names(engine)
+    if previous_version is not None and previous_version < 11:
+        _let_repeaters_share_a_callsign(engine)
+
+
+def _let_repeaters_share_a_callsign(engine: Engine) -> None:
+    """Turn the unique index on the repeater callsign into a plain one.
+
+    Clubs run several repeaters under one callsign, on different bands or
+    modes, and the URE list holds them all. The index keeps its name, so a
+    database created now and an upgraded one end up the same.
+    """
+    index = "ix_repeaters_callsign"
+    with engine.begin() as connection:
+        connection.execute(text(f"DROP INDEX IF EXISTS {index}"))
+        connection.execute(text(f"CREATE INDEX {index} ON repeaters (callsign)"))
+    logger.info("schema upgrade: repeaters may share a callsign")
 
 
 def _english_country_names(engine: Engine) -> None:

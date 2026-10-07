@@ -83,6 +83,10 @@ class Kind:
     second_row: tuple[str, ...] = ()
     #: True when the list is searched with /search rather than shown whole.
     searchable: bool = False
+    #: Column of the insert row's label; the widest fixed one when None.
+    insert_column: int | None = None
+    #: What the top row of a searchable list says when all of it is shown.
+    count_text: str = N_("{total} items")
 
     def items(self, query: str = "") -> list[Item]:
         """The rows to show; ``query`` is the /search text of searchable lists."""
@@ -533,5 +537,5 @@ def tab_bar(
                 style="dim",
             )
         else:
-            text.append(_("{total} contacts").format(total=total), style="dim")
+            text.append(_(kind.count_text).format(total=total), style="dim")
     return text

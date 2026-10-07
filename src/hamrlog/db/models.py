@@ -396,13 +396,22 @@ class Repeater(Base):
     ``input_hz``, which is ``output_hz + shift_hz``. Analogue repeaters need a
     CTCSS tone to open them; digital ones carry their parameters in
     ``digital_data`` (color code, talkgroup, reflector, room).
+
+    The callsign is not unique: one club often runs several repeaters under
+    the same one, on different bands or modes. Callsign and output frequency
+    tell them apart.
     """
 
     __tablename__ = "repeaters"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    callsign: Mapped[str] = mapped_column(String(32), unique=True, index=True)
+    callsign: Mapped[str] = mapped_column(String(32), index=True)
+    #: Who runs it: the club or URE section.
     name: Mapped[str] = mapped_column(String(120), default="")
+    #: The number the URE gives it, «R5» or «R73»; empty when it has none.
+    ure_number: Mapped[str] = mapped_column(String(8), default="")
+    #: IARU channel of its output, «RV58» or «RU698».
+    channel: Mapped[str] = mapped_column(String(8), default="")
 
     band: Mapped[str] = mapped_column(String(16), default="")
     #: Repeater output: what you tune and listen to.
@@ -427,6 +436,8 @@ class Repeater(Base):
     digital_data: Mapped[dict[str, Any]] = mapped_column(default=dict)
     notes: Mapped[str] = mapped_column(Text, default="")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: From the URE list: shown and used, never changed or deleted.
+    preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
@@ -438,11 +449,11 @@ class Repeater(Base):
 
 
 class Profile(Base):
-    """A saved snapshot of the working configuration, recalled with /perfil.
+    """A profile: what every QSO logged while it is active inherits.
 
-    Shown to the operator as a «configuración». It is not tied to one station:
-    stations list the configurations assigned to them, and loading one applies the
-    pair.
+    Managed in the profiles view (F4) and activated there with Enter, with
+    Ctrl+0 to Ctrl+9 when it holds one of the ten ``slot`` keys, or with
+    /profile. The default one is activated on start.
     """
 
     __tablename__ = "profiles"
@@ -455,10 +466,18 @@ class Profile(Base):
     #: by the upgrade that turns it into an assignment; no longer written.
     station_id: Mapped[int | None] = mapped_column(ForeignKey("stations.id"), nullable=True)
     repeater_id: Mapped[int | None] = mapped_column(ForeignKey("repeaters.id"), nullable=True)
+    #: The equipment set («setup») the QSOs are made with.
+    equipment_id: Mapped[int | None] = mapped_column(
+        ForeignKey("equipment.id", ondelete="SET NULL"), nullable=True
+    )
+    #: 0 to 9: one of the ten main profiles, activated with Ctrl+<slot>.
+    #: Unique among profiles; the service enforces it.
+    slot: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
 
     band: Mapped[str] = mapped_column(String(16), default="")
     freq_hz: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mode: Mapped[str] = mapped_column(String(24), default="")
+    power_w: Mapped[int | None] = mapped_column(Integer, nullable=True)
     digital_data: Mapped[dict[str, Any]] = mapped_column(default=dict)
 
     # Fast entry behaviour, so a contest profile can differ from a ragchew one.
@@ -471,6 +490,7 @@ class Profile(Base):
 
     operator: Mapped[Operator | None] = relationship()
     repeater: Mapped[Repeater | None] = relationship()
+    equipment: Mapped[Equipment | None] = relationship()
     stations: Mapped[list[Station]] = relationship(
         secondary=station_profile_links, order_by="Station.name", back_populates="profiles"
     )
@@ -590,4 +610,7 @@ class SchemaVersion(Base):
 #: 7 stores country names in English, as ADIF does; they are translated when shown.
 #: 8 gives radios, antennas and supplies their own unique code (E0001, A0001, S0001).
 #: 9 lets a QSO record the equipment set it was made with.
-CURRENT_SCHEMA_VERSION = 9
+#: 10 gives profiles a setup, a power and one of the ten Ctrl+digit keys.
+#: 11 lets repeaters share a callsign, gives them the URE number and channel,
+#:   and adds the read-only catalog of the URE repeater list.
+CURRENT_SCHEMA_VERSION = 11

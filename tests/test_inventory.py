@@ -171,7 +171,7 @@ async def open_tab(pilot, app, steps: int = 0) -> None:
     await pilot.pause()
     await pilot.pause()
     for _ in range(steps):
-        await pilot.press("f6")
+        await pilot.press("ctrl+n")
         await pilot.pause()
         await pilot.pause()
 
@@ -239,7 +239,7 @@ async def test_items_are_written_in_the_entry_line(operator):
         await submit(pilot, app, {"name": "Batería", "voltage_v": "12,8", "current_a": "20"})
         assert PowerSupplyService.list_all()[0].voltage_v == 12.8
 
-        await pilot.press("f6")  # wraps round to Equipos
+        await pilot.press("ctrl+n")  # wraps round to Equipos
         await pilot.pause()
         await pilot.pause()
         await submit(pilot, app, {"name": "Portátil", "antennas": "x-300n"})
@@ -336,20 +336,32 @@ async def test_function_keys_belong_to_the_view(operator):
             )
 
         assert active() == "Equipos"
-        for key, expected in (("f6", "Emisoras"), ("shift+pagedown", "Antenas"),
-                              ("f5", "Emisoras"), ("shift+pageup", "Equipos"),
-                              ("f5", "Fuentes")):
+        for key, expected in (("ctrl+n", "Emisoras"), ("shift+pagedown", "Antenas"),
+                              ("ctrl+n", "Fuentes"), ("ctrl+n", "Equipos"),
+                              ("shift+pageup", "Fuentes")):
             await pilot.press(key)
             await pilot.pause()
             await pilot.pause()
             assert active() == expected, key
 
-        # Keys this view does not use do nothing, and never type into the line.
-        for key in ("f3", "f4", "f7", "f12"):
+        # Its own key, and keys no view uses, do nothing and never type into
+        # the line.
+        for key in ("f2", "f7", "f12"):
             await pilot.press(key)
             await pilot.pause()
         assert app.query_one(InventoryView).display
+        assert active() == "Fuentes"
         assert not any(app.query_one(EntryPanel).values().values())
+
+        # The keys of the other views open them from here, and back.
+        for key, title in (("f3", "Agenda"), ("f4", "Perfiles"), ("f5", "Repetidores"),
+                           ("f2", "Inventario")):
+            await pilot.press(key)
+            await pilot.pause()
+            await pilot.pause()
+            assert app.query_one("#log-frame").border_title == title, key
+        # The inventory comes back on the tab it was left on.
+        assert active() == "Fuentes"
 
         # Escape never leaves the view; F1 does.
         await pilot.press("escape")
@@ -435,7 +447,7 @@ async def test_sets_take_codes_and_the_code_is_shown(operator):
         assert [s.name for s in equipment.stations] == ["Icom IC-705"]
         assert [a.name for a in equipment.antennas] == ["X-300N"]
 
-        await pilot.press("f6")
+        await pilot.press("ctrl+n")
         await pilot.pause()
         await pilot.pause()
         table = app.query_one(ItemTable)
@@ -453,7 +465,8 @@ def test_the_bundled_catalog_is_well_formed():
     catalogs = load_catalogs()
     assert all(catalogs[kind] for kind in ("emisoras", "antenas", "fuentes"))
     type_names = {name for name, _low, _high in DEFAULT_STATION_TYPES}
-    for kind, entries in catalogs.items():
+    for kind in ("emisoras", "antenas", "fuentes"):
+        entries = catalogs[kind]
         names = [entry["name"].lower() for entry in entries]
         assert len(names) == len(set(names)), kind
         for entry in entries:

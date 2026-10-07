@@ -80,8 +80,17 @@ async def test_f3_shows_the_address_book_in_place_of_the_log(operator):
         ]
         assert app.query_one("#entry-second").display
 
-        # F2 does nothing here; F1 goes back to the log.
+        # F3 does nothing here, F2 opens the inventory and F3 comes back;
+        # F1 goes back to the log.
+        await pilot.press("f3")
+        await pilot.pause()
+        assert app.query_one("#log-frame").border_title == "Agenda"
         await pilot.press("f2")
+        await pilot.pause()
+        await pilot.pause()
+        assert app.query_one("#log-frame").border_title == "Inventario"
+        await pilot.press("f3")
+        await pilot.pause()
         await pilot.pause()
         assert app.query_one("#log-frame").border_title == "Agenda"
         await pilot.press("f1")

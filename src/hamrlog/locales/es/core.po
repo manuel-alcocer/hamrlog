@@ -398,29 +398,28 @@ msgstr "El indicativo del repetidor no puede estar vacío."
 msgid "The repeater output frequency is missing."
 msgstr "Falta la frecuencia de salida del repetidor."
 
-#: src/hamrlog/core/services.py:798
-msgid "Repeater {call} already exists."
-msgstr "El repetidor {call} ya existe."
-
 #: src/hamrlog/core/services.py:826
 msgid "Repeater not found."
 msgstr "Repetidor no encontrado."
 
 #: src/hamrlog/core/services.py:974
-msgid "The configuration name cannot be empty."
-msgstr "El nombre de la configuración no puede estar vacío."
+msgid "The profile name cannot be empty."
+msgstr "El nombre del perfil no puede estar vacío."
+
+msgid "The key of a profile goes from 0 to 9."
+msgstr "La tecla de un perfil va del 0 al 9."
 
 #: src/hamrlog/core/services.py:979
-msgid "The configuration «{name}» already exists."
-msgstr "Ya existe la configuración «{name}»."
+msgid "The profile «{name}» already exists."
+msgstr "Ya existe el perfil «{name}»."
 
 #: src/hamrlog/core/services.py:987
 msgid "The antenna «{antenna}» does not work on {band} ({bands})."
 msgstr "La antena «{antenna}» no trabaja en {band} ({bands})."
 
 #: src/hamrlog/core/services.py:1015
-msgid "Configuration not found."
-msgstr "Configuración no encontrada."
+msgid "Profile not found."
+msgstr "Perfil no encontrado."
 
 #: src/hamrlog/core/services.py:1115
 msgid "Rig not found."
@@ -509,3 +508,18 @@ msgstr "El separador de millar y el decimal no pueden ser el mismo («{separator
 #: src/hamrlog/core/units.py:263
 msgid "unit {unit} · decimal «{decimal}» · thousands {thousands}"
 msgstr "unidad {unit} · decimal «{decimal}» · millar {thousands}"
+
+msgid "{call} names {count} repeaters; add the frequency or the mode: {options}"
+msgstr "{call} son {count} repetidores; añade la frecuencia o el modo: {options}"
+
+msgid "{call} comes from the URE list: it cannot be changed or deleted."
+msgstr "{call} viene de la lista de la URE: no se puede modificar ni borrar."
+
+msgid "Repeater {call} already exists on {freq}."
+msgstr "El repetidor {call} ya existe en {freq}."
+
+msgid "No repeater {call} matches «{hint}»"
+msgstr "Ningún repetidor {call} encaja con «{hint}»"
+
+msgid "No repeater registered with the callsign «{call}»"
+msgstr "No hay ningún repetidor dado de alta con el indicativo «{call}»"

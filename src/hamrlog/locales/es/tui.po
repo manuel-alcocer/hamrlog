@@ -11,8 +11,8 @@ msgid "Inventory: /brand NAME filters the list · /brand alone clears the filter
 msgstr "Inventario: /marca NOMBRE filtra la lista · /marca sola quita el filtro"
 
 #: src/hamrlog/tui/app.py:76
-msgid "Enter add · ↑↓ list · F5/F6 tab · Alt+↑↓ brand · F1 log"
-msgstr "Enter alta · ↑↓ lista · F5/F6 pestaña · Alt+↑↓ marca · F1 registro"
+msgid "Enter add · ↑↓ list · Ctrl+N tab · Alt+↑↓ brand · F1 log"
+msgstr "Enter alta · ↑↓ lista · Ctrl+N pestaña · Alt+↑↓ marca · F1 registro"
 
 #: src/hamrlog/tui/app.py:79
 msgid "Editing · Tab next field · Enter saves · Esc cancels"
@@ -33,10 +33,6 @@ msgstr "Uso: /frec 7.100"
 #: src/hamrlog/tui/app.py:88
 msgid "Usage: /mode SSB"
 msgstr "Uso: /modo SSB"
-
-#: src/hamrlog/tui/app.py:89
-msgid "Usage: /profile name"
-msgstr "Uso: /perfil nombre"
 
 #: src/hamrlog/tui/app.py:90
 msgid "Usage: /repeater CALLSIGN · /direct to go back to simplex"
@@ -192,7 +188,7 @@ msgstr "Directo en {freq} (simplex)"
 
 #: src/hamrlog/tui/app.py:727
 msgid "There is no profile «{name}»"
-msgstr "No existe la configuración «{name}»"
+msgstr "No existe el perfil «{name}»"
 
 #: src/hamrlog/tui/app.py:801
 msgid "Editing the QSO with {call} at {time} UTC"
@@ -266,10 +262,6 @@ msgstr " · subtono {tone}"
 msgid "Via repeater {call} · {detail}"
 msgstr "Por el repetidor {call} · {detail}"
 
-#: src/hamrlog/tui/app.py:709
-msgid "No repeater registered with the callsign «{call}»"
-msgstr "No hay ningún repetidor dado de alta con el indicativo «{call}»"
-
 #: src/hamrlog/tui/app.py:772
 msgid "You are on an item of the list: {keys}"
 msgstr "Estás sobre un elemento de la lista: {keys}"
@@ -313,10 +305,6 @@ msgstr "{count} QSO hoy"
 #: src/hamrlog/tui/app.py:443
 msgid "Address book: {who}"
 msgstr "Agenda: {who}"
-
-#: src/hamrlog/tui/app.py:724
-msgid "Profile «{name}» loaded"
-msgstr "Configuración «{name}» cargada"
 
 #: src/hamrlog/tui/app.py:562
 msgid "Frequency not recognised: «{text}»"
@@ -734,10 +722,6 @@ msgstr "VÍA"
 msgid "RIG"
 msgstr "EQUIPO"
 
-#: src/hamrlog/tui/widgets/statusline.py:49
-msgid "(unsaved)"
-msgstr "(sin guardar)"
-
 msgid "ID"
 msgstr "ID"
 
@@ -844,8 +828,8 @@ msgstr "Agenda: /buscar TEXTO busca en indicativo, nombre, ciudad, provincia, pa
 msgid "Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log"
 msgstr "Enter alta · ↑↓ lista · RePág/AvPág página · /buscar TEXTO · F1 registro"
 
-msgid "/search is for the address book (F3)."
-msgstr "/buscar es para la agenda (F3)."
+msgid "/search is for the address book (F3) and the repeaters (F5)."
+msgstr "/buscar es para la agenda (F3) y los repetidores (F5)."
 
 msgid "Showing everything."
 msgstr "Se muestra todo."
@@ -862,14 +846,174 @@ msgstr "{shown} de {total} · acota con /buscar"
 msgid "{total} contacts"
 msgstr "{total} contactos"
 
-msgid "F1 Log · F2 Inventory · F3 Address book · Ctrl+Q Quit"
-msgstr "F1 Registro · F2 Inventario · F3 Agenda · Ctrl+Q Salir"
-
-msgid "F1 Log · F2 Inventory · F3 Address book"
-msgstr "F1 Registro · F2 Inventario · F3 Agenda"
-
-msgid "F1 · F2 · F3"
-msgstr "F1 · F2 · F3"
-
 msgid "d: the address book says «{name}»"
 msgstr "d: en la agenda es «{name}»"
+
+msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · Ctrl+Q Quit"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · Ctrl+Q Salir"
+
+msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores"
+
+msgid "F1 · F2 · F3 · F4 · F5"
+msgstr "F1 · F2 · F3 · F4 · F5"
+
+msgid "PROFILE"
+msgstr "PERFIL"
+
+msgid "(none)"
+msgstr "(ninguno)"
+
+msgid "Profiles"
+msgstr "Perfiles"
+
+msgid "Profiles: Enter on one activates it · * makes it the default, activated on start · Ctrl+0…9 activate the main ones from anywhere · /profile NAME or KEY"
+msgstr "Perfiles: Enter activa el elegido · * lo hace predeterminado, se activa al arrancar · Ctrl+0…9 activan los principales · /perfil NOMBRE o TECLA"
+
+msgid "Enter add · ↑↓ list · Ctrl+0…9 activate · F1 log"
+msgstr "Enter añade · ↑↓ lista · Ctrl+0…9 activan · F1 registro"
+
+msgid "Enter activate · * default · E edit · D delete · ↓ back to typing"
+msgstr "Enter activar · * predeterminado · E editar · D borrar · ↓ volver a escribir"
+
+msgid "Usage: /profile NAME, or /profile 3 for the one on Ctrl+3"
+msgstr "Uso: /perfil NOMBRE, o /perfil 3 para el de Ctrl+3"
+
+msgid "Activate profile"
+msgstr "Activar perfil"
+
+msgid "Activate"
+msgstr "Activar"
+
+msgid "No profile is activated on start now."
+msgstr "Ya no se activa ningún perfil al arrancar."
+
+msgid "«{name}» is activated on start."
+msgstr "«{name}» se activa al arrancar."
+
+msgid "Profile «{name}» active: new QSOs are logged with it"
+msgstr "Perfil «{name}» activo: los QSO nuevos se registran con él"
+
+msgid "No profile has the key Ctrl+{key}; give it one in Profiles (F4)."
+msgstr "Ningún perfil tiene la tecla Ctrl+{key}; asígnasela en Perfiles (F4)."
+
+msgid "<New profile>"
+msgstr "<Nuevo perfil>"
+
+msgid "NEW PROFILE   what every QSO inherits while it is active"
+msgstr "NUEVO PERFIL   lo que hereda cada QSO mientras está activo"
+
+msgid "CTRL: 0-9, activated with Ctrl+digit · OPERATOR: callsign · SETUP from F2"
+msgstr "CTRL: 0-9, se activa con Ctrl+número · OPERADOR: indicativo · EQUIPO de F2"
+
+msgid "REPEATER: callsign · PWR: watts · DIGITAL: TG=214, CC=1"
+msgstr "REPETIDOR: indicativo · POT: vatios · DIGITAL: TG=214, CC=1"
+
+msgid "activate the main ones"
+msgstr "activan los principales"
+
+msgid "OPERATOR"
+msgstr "OPERADOR"
+
+msgid "REPEATER"
+msgstr "REPETIDOR"
+
+msgid "DIGITAL"
+msgstr "DIGITAL"
+
+msgid "Enter activates · * default · E edit · D delete"
+msgstr "Enter lo activa · * predeterminado · E editar · D borrar"
+
+msgid "active"
+msgstr "activo"
+
+msgid "activated on start"
+msgstr "se activa al arrancar"
+
+msgid "Ctrl+{key} activates it"
+msgstr "Ctrl+{key} lo activa"
+
+msgid "⚠ the setup «{name}» does not cover this frequency"
+msgstr "⚠ el equipo «{name}» no cubre esta frecuencia"
+
+msgid "current operator"
+msgstr "operador actual"
+
+msgid "no setup"
+msgstr "sin equipo"
+
+msgid "Write the digital values as NAME=VALUE: «{text}»"
+msgstr "Escribe los valores digitales como NOMBRE=VALOR: «{text}»"
+
+msgid "{mode} does not use «{name}»; it uses: {fields}"
+msgstr "{mode} no usa «{name}»; usa: {fields}"
+
+msgid "The power is a whole number of watts: «{text}»"
+msgstr "La potencia es un número entero de vatios: «{text}»"
+
+# Repeaters view (F5).
+msgid "Repeaters: Enter on one tunes it · /search TEXT looks up callsign, URE number, channel, club, place, locator or mode · /search alone shows everything"
+msgstr "Repetidores: Enter sobre uno lo sintoniza · /buscar TEXTO busca en indicativo, número URE, canal, club, lugar, locator o modo · /buscar solo lo muestra todo"
+
+msgid "Enter tune · E edit · D delete · ↓ back to typing"
+msgstr "Enter sintonizar · E editar · D borrar · ↓ volver a escribir"
+
+msgid "Repeaters"
+msgstr "Repetidores"
+
+msgid "{total} items"
+msgstr "{total} elementos"
+
+msgid "from the URE list: Enter tunes it; it cannot be changed or deleted"
+msgstr "de la lista de la URE: Enter lo sintoniza; no se puede modificar ni borrar"
+
+msgid "<New repeater>"
+msgstr "<Nuevo repetidor>"
+
+msgid "{total} repeaters"
+msgstr "{total} repetidores"
+
+msgid "Input"
+msgstr "Entrada"
+
+msgid "Output"
+msgstr "Salida"
+
+msgid "NEW REPEATER   callsign and output; the input defaults to the band's shift"
+msgstr "NUEVO REPETIDOR   indicativo y salida; sin entrada se usa el desplazamiento de la banda"
+
+msgid "INPUT: frequency, or shift (-600, -7.6 MHz) · TONE: CTCSS in Hz · URE: R5, R73"
+msgstr "ENTRADA: frecuencia, o desplazamiento (-600, -7.6 MHz) · TONO: CTCSS en Hz · URE: R5, R73"
+
+msgid "/search TEXT looks up callsign, URE number, channel, club, place, locator or mode"
+msgstr "/buscar TEXTO busca en indicativo, número URE, canal, club, lugar, locator o modo"
+
+msgid "OUTPUT"
+msgstr "SALIDA"
+
+msgid "INPUT"
+msgstr "ENTRADA"
+
+msgid "TONE"
+msgstr "TONO"
+
+msgid "CHANNEL"
+msgstr "CANAL"
+
+msgid "OWNER"
+msgstr "TITULAR"
+
+msgid "{what}: frequency not recognised: «{text}»"
+msgstr "{what}: frecuencia no reconocida: «{text}»"
+
+msgid "Shift not recognised: «{text}»"
+msgstr "Desplazamiento no reconocido: «{text}»"
+
+msgid "Enter tunes it"
+msgstr "Enter lo sintoniza"
+
+msgid "tone {tone} Hz"
+msgstr "tono {tone} Hz"
+
+msgid "{name} is from the URE list: it is neither changed nor deleted. Enter tunes it."
+msgstr "{name} es de la lista de la URE: no se modifica ni se borra. Enter lo sintoniza."

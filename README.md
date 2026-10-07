@@ -209,7 +209,7 @@ escribirlo y pulsar Enter ya queda registrado, con el informe por defecto del
 modo activo (59 en fonía, 599 en CW, -10 en FT8).
 
 Las casillas son `indicativo, nombre, rst_env, rst_rec, qth, notas`, salvo que
-la configuración cargada con `/perfil` traiga otras. Las comas no separan
+el perfil cargado traiga otras. Las comas no separan
 nada: son texto corriente, así que una nota puede llevarlas.
 
 Mientras escribes el indicativo, si ya está en el log aparece un aviso de
@@ -225,11 +225,17 @@ quién es.
 | `↑` `↓` | Recorren el histórico |
 | `Ctrl+D` | Borra el QSO señalado, o el último |
 | `Esc` | Vuelve a `<Insertar nuevo>` |
-| `F1` | **Registro**, desde cualquier ventana |
+| `F1` | **Registro** |
 | `F2` | **Inventario** |
 | `F3` | **Agenda** de contactos |
+| `F4` | **Perfiles** |
+| `F5` | **Repetidores** |
+| `Ctrl+N` | Pestaña siguiente, en las secciones que tienen pestañas |
+| `Ctrl+0` … `Ctrl+9` | Activan el perfil con esa tecla, desde cualquier ventana |
 | `RePág` `AvPág` | Recorren el histórico página a página |
 | `Ctrl+Q` | Salir |
+
+Las teclas `F1` a `F5` llevan a su sección desde cualquier otra.
 
 Lo que hereda cada QSO se cambia con comandos.
 
@@ -257,7 +263,7 @@ completa lo sugerido. Una emisora sin nombre se llama «marca modelo».
 
 | Tecla | En el Inventario |
 |---|---|
-| `F5` `F6` o `Mayús+RePág` `Mayús+AvPág` | Pestaña anterior / siguiente |
+| `Ctrl+N` | Pestaña siguiente, en ciclo; `Mayús+RePág` `Mayús+AvPág` van atrás y adelante |
 | `RePág` `AvPág` | Recorren la lista página a página |
 | `Alt+↑` `Alt+↓` | Recorre las marcas de la pestaña (filtro) |
 | `D` `E` sobre un elemento | Suprimir / editar en la línea de entrada |
@@ -275,7 +281,8 @@ españolas. Se cargan una sola vez —abrir de nuevo no duplica nada— y lo que
 hayas dado de alta con el mismo nombre se respeta. Los elementos del catálogo
 salen atenuados: **no se modifican ni se borran**, solo se usan al montar un
 equipo. Para añadir un catálogo basta con dejar otro `.json` en esa carpeta,
-con la forma `{"tipo": "emisoras" | "antenas" | "fuentes", "elementos": [...]}`.
+con la forma `{"tipo": "emisoras" | "antenas" | "fuentes" | "repetidores",
+"elementos": [...]}`.
 
 ### Agenda (`F3`)
 
@@ -298,6 +305,78 @@ nombre, ciudad, provincia, país o ID DMR, y `/buscar` solo vuelve a todas.
 La cabecera dice cuántas hay y cuántas se ven. `RePág` y `AvPág` pasan
 página.
 
+### Perfiles (`F4`)
+
+Un **perfil** es lo que hereda cada QSO mientras está activo: operador, equipo
+(de los del Inventario), frecuencia —la banda sale de ella—, modo, potencia,
+repetidor y datos del modo digital. Con un perfil activo basta con escribir el
+indicativo en el registro y pulsar Enter: el QSO se guarda con todo eso, y con
+la emisora y la antena del equipo que cubran su frecuencia.
+
+`F4` muestra la lista en el recuadro del registro, igual que el Inventario y
+la Agenda, con `<Nuevo perfil>` al final y dos filas de casillas:
+
+```
+ CTRL  1    NOMBRE  40m casa      OPERADOR  EA7WM       EQUIPO  Casa
+ FREC  7.100        MODO  SSB     POT  100   REPETIDOR             DIGITAL
+```
+
+| Casilla | Qué lleva |
+|---|---|
+| CTRL | `0` a `9`: el perfil es uno de los diez **principales** y `Ctrl+` esa cifra lo activa. Si otro tenía la cifra, la pierde |
+| OPERADOR | Indicativo; si no existe se da de alta. Vacío, sigue el operador actual |
+| EQUIPO | Un equipo del Inventario (`F2`) |
+| REPETIDOR | Indicativo de un repetidor; sin frecuencia ni modo, se toman los suyos |
+| DIGITAL | Valores del modo digital: `TG=214, CC=1`, `DG-ID=10, Room=12345`… |
+
+| Tecla | En Perfiles |
+|---|---|
+| `Enter` sobre un perfil | Lo **activa** |
+| `*` sobre un perfil | Lo hace **predeterminado**: se activa al arrancar. Otra vez `*` lo quita |
+| `D` `E` sobre un perfil | Suprimir / editar en la línea de entrada |
+| `Ctrl+0` … `Ctrl+9` | Activan los principales, también desde el registro |
+
+En la lista, `▶` señala el perfil activo y `★` el predeterminado. El perfil
+activo sale en la línea de estado; cambiar a mano la banda, la frecuencia, el
+modo o el repetidor deja de usarlo (sus valores siguen), y editarlo aplica los
+cambios a los QSO que vengan. `/perfil nombre` o `/perfil 3` también lo
+activan, útil en terminales que no distinguen `Ctrl+` cifra.
+
+### Repetidores (`F5`)
+
+`F5` lista los repetidores en el recuadro del registro, como la Agenda: se
+buscan con `/buscar` y la cabecera dice cuántos hay. Cada uno lleva su número
+de la **URE** (`R5`, `R73`), indicativo, frecuencia de **salida** (la que
+escuchas) y de **entrada** (la que transmites), **tono** CTCSS, modo, canal
+IARU (`RV58`, `RU698`), locator y quién lo mantiene.
+
+```
+ IND  ED1YAB      SALIDA  145.725    ENTRADA  145.125   TONO  77.0   MODO  FM   URE  R5   CANAL  RV58
+ TITULAR  Radio Club Rioja        QTH                     LOC  IN82PO   DIGITAL           NOTAS
+```
+
+| Casilla | Qué lleva |
+|---|---|
+| ENTRADA | La frecuencia de entrada, o el desplazamiento si empieza por signo (`-600`, `-7.6 MHz`). Vacía, el habitual de la banda |
+| TONO | CTCSS en Hz; `88` se entiende como `88.5` |
+| URE | El número que le da la URE: `R5`, `R73` |
+| DIGITAL | Como en los perfiles: `CC=1, TG=214` |
+
+`Enter` sobre un repetidor lo **sintoniza**, igual que `/repetidor`. `/buscar`
+mira en indicativo, número URE, canal, titular, lugar, locator, banda y modo,
+y cada palabra acota más: `/buscar R5`, `/buscar dmr madrid`, `/buscar IN80`.
+
+**La lista de la URE.** Al abrir se cargan los repetidores publicados en
+[ure.es/repetidores](https://www.ure.es/repetidores/) (10 m, 6 m, 2 m, 70 cm
+y 23 cm), de `hamrlog/data/preseed/repetidores.json`. Como el catálogo del
+Inventario, se cargan una sola vez, salen atenuados y **no se modifican ni se
+borran**; los que tú añadas sí.
+
+Un mismo indicativo puede ser varios repetidores (un radioclub con uno D-Star,
+otro DMR y otro C4FM). Cuando pasa, se distinguen añadiendo la frecuencia de
+salida, el modo o la banda: `/repetidor ED4ZAH DMR`, `/repetidor ED4ZAH
+438.325`; en la casilla REPETIDOR de un perfil, igual.
+
 ### Idioma
 
 La interfaz está en inglés y en español. Se elige sola según el idioma del
@@ -314,8 +393,8 @@ Escritos en la primera casilla de la línea de entrada:
 | `/banda 20m` | Cambia de banda |
 | `/frec 14.250` | Fija la frecuencia, con detección automática de banda |
 | `/modo cw` o `/modo dmr` | Cambia de modo, analógico o digital |
-| `/perfil 20m` | Carga una configuración guardada por su nombre |
-| `/repetidor ED7ZAE` | Sale por ese repetidor |
+| `/perfil 20m` o `/perfil 3` | Activa un perfil por su nombre o su tecla |
+| `/repetidor ED7ZAE` | Sale por ese repetidor; `/repetidor ED4ZAH DMR` si el indicativo es de varios |
 | `/directo` | Vuelve a simplex |
 | `/borrar` o `/deshacer` | Borra el último contacto registrado |
 | `/ayuda` | Lista los comandos |
@@ -329,8 +408,7 @@ diálogos: la confirmación de un borrado y los datos de un modo digital.
 
 Las pantallas de gestión se han retirado para rediseñarlas. Los datos y la
 lógica siguen en la base de datos y en `core/services.py`, pero desde la
-aplicación **no se puede**, de momento: elegir con qué equipo trabajas, dar de alta repetidores o
-configuraciones, cambiar de operador ni tocar los ajustes (unidades, orden del
+aplicación **no se puede**, de momento: cambiar de operador ni tocar los ajustes (unidades, orden del
 histórico, validación de indicativos, métricas). Importar y exportar sigue
 disponible [desde la línea de órdenes](#desde-la-línea-de-órdenes).
 
@@ -421,7 +499,8 @@ puede usarlos.
 
 ### Repetidores
 
-`/repetidor ED7ZAE` hace salir tu señal por un repetidor ya dado de alta. Se
+`/repetidor ED7ZAE`, o `Enter` sobre él en [Repetidores](#repetidores-f5),
+hace salir tu señal por un repetidor ya dado de alta. Se
 adopta todo lo que define —frecuencia de escucha y de transmisión, banda, modo
 y sus parámetros digitales— y puedes registrar contactos de inmediato.
 
@@ -434,12 +513,11 @@ frecuencia de entrada (lo que transmites), `FREQ_RX` la de salida (lo que
 escuchas) y `PROP_MODE` vale `RPT`, tal como define ADIF. El indicativo del
 repetidor viaja en `APP_HAMRLOG_REPEATER` y se conserva al reimportar.
 
-### Perfiles
+### Emisora y antena de cada QSO
 
-Una configuración guarda banda, frecuencia, modo, datos del modo digital,
-repetidor y formato de la línea de entrada, y `/perfil nombre` la carga. Cada
-QSO guarda el equipo y la antena en uso, que se exportan como `MY_RIG` y
-`MY_ANTENNA`.
+Cada QSO guarda la emisora y la antena en uso —las del equipo del perfil
+activo que cubran su frecuencia—, que se exportan como `MY_RIG` y
+`MY_ANTENNA`. Ver [Perfiles](#perfiles-f4).
 
 ### Borrar QSO del registro
 

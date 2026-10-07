@@ -29,7 +29,9 @@ from textual.widgets import Input, Label, Static
 from ...i18n import N_, _
 
 #: Keys that act on the QSO under the cursor while browsing the log.
-BROWSE_ACTIONS: dict[str, str] = {"d": "delete", "e": "edit", "r": "repeat", " ": "mark"}
+BROWSE_ACTIONS: dict[str, str] = {
+    "d": "delete", "e": "edit", "r": "repeat", " ": "mark", "*": "default",
+}
 
 #: The only boxes an edit of several QSOs at once offers.
 BULK_FIELDS: tuple[str, ...] = ("freq_hz", "mode", "equipment")
@@ -84,6 +86,18 @@ FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
     "country": (N_("COUNTRY"), 14),
     "email": (N_("EMAIL"), 22),
     "notes": (N_("NOTES"), None),
+    # Profiles view (F4).
+    "slot": ("CTRL", 4),
+    "operator": (N_("OPERATOR"), 12),
+    "repeater": (N_("REPEATER"), 12),
+    "digital": (N_("DIGITAL"), None),
+    # Repeaters view (F5).
+    "output": (N_("OUTPUT"), 12),
+    "input": (N_("INPUT"), 12),
+    "tone": (N_("TONE"), 7),
+    "ure_number": ("URE", 6),
+    "channel": (N_("CHANNEL"), 8),
+    "owner": (N_("OWNER"), 24),
 }
 
 DEFAULT_LAYOUT: tuple[str, int | None] = (N_("FIELD"), 12)
@@ -138,11 +152,12 @@ class BrowseBar(Static, can_focus=True):
         Binding("pagedown", "move_history(10)", N_("Down 10"), show=False),
         # This bar holds the keyboard while browsing, so it owns these too.
         Binding("delete", "run('delete')", N_("Delete"), show=False),
+        Binding("enter", "run('activate')", N_("Activate"), show=False),
     ]
 
     @dataclass
     class Action(Message):
-        """A key was pressed while browsing: delete, edit or repeat."""
+        """A key was pressed while browsing: delete, edit, repeat, activate..."""
 
         action: str
 

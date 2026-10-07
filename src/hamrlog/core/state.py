@@ -22,12 +22,15 @@ class SessionState:
         operator_id: Local operator logging the contacts.
         station_id: Rig in use.
         antenna_id: Antenna connected to it, one of the station's.
+        equipment_id: Equipment set («setup») in use; it decides the station
+            and antenna of each QSO from the frequency.
         repeater_id: Repeater being worked through, None for simplex.
         repeater_call: Its callsign, kept here to avoid a query per contact.
         band: ADIF band name, e.g. "40m".
         freq_hz: Frequency as tuned: the repeater output when using one.
         freq_tx_hz: Actual transmit frequency when it differs (repeater input).
         mode: Mode name as shown in the UI, e.g. "C4FM".
+        power_w: Transmit power, None when not stated.
         digital_data: Mode specific values (talkgroup, reflector, room...).
         field_order: Positional mapping of the fast entry line.
         separator: Token separator of the fast entry line.
@@ -40,18 +43,22 @@ class SessionState:
             worked, so the book grows with the log.
         history_order: "asc" shows the oldest QSO first and grows downwards,
             "desc" puts the newest at the top.
-        profile_name: Name of the loaded profile, empty when unsaved.
+        profile_id: The active profile, None when none is or when the
+            operator has changed what it set.
+        profile_name: Its name, for the status line.
     """
 
     operator_id: int | None = None
     station_id: int | None = None
     antenna_id: int | None = None
+    equipment_id: int | None = None
     repeater_id: int | None = None
     repeater_call: str = ""
     band: str = ""
     freq_hz: int | None = None
     freq_tx_hz: int | None = None
     mode: str = modes.DEFAULT_MODE
+    power_w: int | None = None
     digital_data: dict[str, str] = field(default_factory=dict)
     field_order: tuple[str, ...] = DEFAULT_FIELD_ORDER
     separator: str = ","
@@ -62,6 +69,7 @@ class SessionState:
     autofill_from_book: bool = True
     add_to_book: bool = True
     history_order: str = "asc"
+    profile_id: int | None = None
     profile_name: str = ""
 
     @property
@@ -85,6 +93,14 @@ class SessionState:
     def apply_frequency_format(self) -> None:
         """Make this state's format the one the whole application uses."""
         units.set_active(self.frequency_format)
+
+    def leave_profile(self) -> None:
+        """The operator changed by hand what the active profile set.
+
+        Its values stay in use, but they are no longer that profile.
+        """
+        self.profile_id = None
+        self.profile_name = ""
 
     def set_band(self, band_name: str, *, move_frequency: bool = True) -> None:
         """Select a band and, unless told otherwise, jump to its default frequency.

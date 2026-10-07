@@ -27,7 +27,8 @@ hamrlog/
 ├── adif/           Lectura y escritura del formato ADIF 3.1
 ├── i18n.py         Traducciones: _() y lectura de los .po
 ├── locales/es/     Traducciones al español, un .po por área
-├── data/preseed/   Catálogo de emisoras, antenas y fuentes (JSON, en español)
+├── data/preseed/   Catálogo de emisoras, antenas, fuentes y la lista de
+│                   repetidores de la URE (JSON, en español)
 ├── tui/            Interfaz Textual: una sola pantalla
 │   ├── screens/        base.py = los dos diálogos (confirmación y formulario)
 │   └── widgets/        detail.py = detalle de lo señalado en el histórico
@@ -131,7 +132,19 @@ pantalla: oculta el histórico, muestra `InventoryView` en el mismo marco y
 reconstruye la línea de entrada con las casillas de la pestaña. Cada pestaña es
 una `Kind` (`tui/inventory.py`) que declara columnas, casillas y cómo se
 guardan; la navegación, la fila `<Nuevo …>`, la barra de acciones y la edición
-son las del registro. Lo escrito a medias se guarda por vista y pestaña.
+son las del registro. Lo escrito a medias se guarda por vista y pestaña. La
+Agenda (`F3`, `tui/address_book.py`), los Perfiles (`F4`, `tui/profiles.py`)
+y los Repetidores (`F5`, `tui/repeaters.py`) son otras `Kind` sobre el mismo
+mecanismo.
+
+**El perfil activo es el estado de la sesión.** Activar un perfil
+(`ProfileService.apply_to_state`) copia sus valores en `SessionState`, y
+`QsoService.log` solo lee el estado: no sabe nada de perfiles. El estado
+recuerda `profile_id` para marcarlo en la lista y en la línea de estado; un
+cambio a mano (`/banda`, `/frec`…) llama a `leave_profile()`, que olvida el
+perfil pero conserva sus valores. Con un equipo en el estado, cada QSO toma la
+emisora y la antena del equipo que cubran su frecuencia
+(`Equipment.parts_for`), como al asignar un equipo a mano.
 
 **Dos identificadores.** Cada emisora, antena y fuente tiene su `id`
 autoincremental, que es el que usan las claves ajenas, y su `code` (`E0001`,
@@ -149,8 +162,16 @@ con `SkipAction`. `F1` es siempre el registro.
 `data/preseed` se insertan como filas con `preset = True` y son los servicios
 los que se niegan a modificarlas o borrarlas, de modo que la regla vale igual
 para la interfaz y para una API. La carga es idempotente (por nombre, sin
-distinguir mayúsculas) y lee cualquier fichero de la carpeta, que declara su
-`tipo`. Esos ficheros son lo único escrito en español.
+distinguir mayúsculas; los repetidores, por indicativo y frecuencia de salida)
+y lee cualquier fichero de la carpeta, que declara su `tipo`. Esos ficheros son
+lo único escrito en español.
+
+**Un indicativo no identifica un repetidor.** La URE publica varios
+repetidores con el mismo indicativo (bandas o modos distintos), así que desde
+el esquema 11 `repeaters.callsign` no es único; lo es, en el servicio, el par
+indicativo + salida. `RepeaterService.resolve` lee lo que escribe el operador
+(«ED4ZAH», «ED4ZAH DMR», «ED4ZAH 438.325») y `label` produce el texto que
+`resolve` vuelve a leer, que es lo que guardan y muestran los perfiles.
 
 **Inglés en el código, traducciones aparte.** Los textos de origen están en
 inglés dentro de `_()`; `N_()` marca los de tablas construidas al importar,
@@ -233,9 +254,9 @@ datos; falta la de presentación.
 | `antennas` | Antenas con sus bandas y marca |
 | `power_supplies` | Fuentes de alimentación: tensión, corriente, marca |
 | `equipment` | Equipos: conjuntos de emisoras, antenas y fuentes |
-| `repeaters` | Repetidores: frecuencias, shift, CTCSS y datos digitales |
+| `repeaters` | Repetidores (F5): número URE, canal, frecuencias, shift, CTCSS y datos digitales. `preset` marca los de la lista de la URE |
 | `contacts` | Agenda: quién es cada indicativo, con su ID DMR |
-| `profiles` | Configuraciones guardadas, incluido el formato de la entrada rápida |
+| `profiles` | Perfiles (F4): operador, equipo, frecuencia, modo, potencia, repetidor, datos digitales, tecla `Ctrl+0…9` y predeterminado |
 | `qsos` | Contactos, con `digital_data` y `extra` en JSON, y el equipo con que se hicieron (`equipment_id`) |
 | `settings` | Clave/valor: estado de la sesión, métricas |
 | `schema_version` | Revisión del esquema, para migraciones futuras |

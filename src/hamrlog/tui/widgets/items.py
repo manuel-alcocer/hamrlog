@@ -55,10 +55,13 @@ class ItemTable(DataTable):
             style = "dim" if item.locked else ""
             self.add_row(*(Text(cell or "", style=style) for cell in item.cells), key=str(item.id))
             self._items[str(item.id)] = item
-        # The label goes in the widest column, where it is not cut short.
-        widest = max(
-            range(len(kind.columns)), key=lambda index: kind.columns[index][1] or 0
-        )
+        # The label goes in the widest column, where it is not cut short,
+        # unless the kind names one.
+        widest = kind.insert_column
+        if widest is None:
+            widest = max(
+                range(len(kind.columns)), key=lambda index: kind.columns[index][1] or 0
+            )
         cells = [Text("") for _ in kind.columns]
         cells[widest] = Text(f"▸ {_(kind.insert_label)}", style="bold green")
         self.add_row(*cells, key=INSERT_ROW_KEY)
@@ -73,6 +76,16 @@ class ItemTable(DataTable):
         if self.row_count:
             self.move_cursor(row=self.row_count - 1, scroll=True)
         self.post_message(self.SelectionChanged(None))
+
+    def on_resize(self) -> None:
+        """Keep the cursor in view when the table gets its real size.
+
+        The view is shown and filled in one go, so the cursor is scrolled to
+        before the table has settled its height; on a long list that left
+        the insert row hidden just below the edge.
+        """
+        if self.row_count:
+            self._scroll_cursor_into_view()
 
     def move_selection(self, delta: int) -> None:
         if not self.row_count:
