@@ -38,7 +38,7 @@ from ..db.session import session_scope
 from ..i18n import _
 from . import bands, modes, repeaters
 from . import callsign as callsign_module
-from .dto import ContactRow, LogStats, QsoRow
+from .dto import ContactRow, LogStats, PartRow, QsoCard, QsoRow
 from .state import SessionState
 
 #: Fields a manually dated QSO allows editing.
@@ -1519,6 +1519,41 @@ def _to_row(qso: Qso, book: dict[str, tuple[str, str]] | None = None) -> QsoRow:
     )
 
 
+def _radio_part(station: Station) -> PartRow:
+    power = f"{station.power_w} W" if station.power_w else ""
+    details = " · ".join(part for part in (power, station.type_names) if part)
+    return PartRow(station.code or "", station.name, details)
+
+
+def _antenna_part(antenna: Antenna) -> PartRow:
+    return PartRow(antenna.code or "", antenna.name, antenna.band_names)
+
+
+def _supply_part(supply: PowerSupply) -> PartRow:
+    def number(value: float | None, unit: str) -> str:
+        return f"{value:g} {unit}" if value is not None else ""
+
+    details = " · ".join(
+        part for part in (number(supply.voltage_v, "V"), number(supply.current_a, "A")) if part
+    )
+    return PartRow(supply.code or "", supply.name, details)
+
+
+def _repeater_summary(repeater: Repeater) -> str:
+    parts = [
+        repeater.callsign,
+        _("listen {rx} · transmit {tx}").format(
+            rx=bands.format_frequency(repeater.output_hz),
+            tx=bands.format_frequency(repeater.input_hz),
+        ),
+    ]
+    if repeater.ctcss_tx:
+        parts.append(_("tone {tone} Hz").format(tone=repeater.ctcss_tx))
+    if repeater.name:
+        parts.append(repeater.name)
+    return " · ".join(parts)
+
+
 def _fill_from_address_book(fields: dict[str, Any], call: str) -> None:
     """Complete blank fields from the address book.
 
@@ -1557,18 +1592,21 @@ def _remember_in_address_book(row: QsoRow) -> None:
     the home callsign, so working the same person portable does not produce a
     second one.
 
+    The name heard on air goes whole into the first name: «Jose Manuel» is
+    one name, not a name and a surname, and there is no telling them apart.
+
     A failure here must never cost the operator the QSO, so it is swallowed.
     """
     base = callsign_module.base_call(row.call)
     if not base:
         return
-    first_name, _sep, last_name = row.name.partition(" ")
+    name = " ".join(row.name.split())
     try:
         known = ContactService.lookup(base)
         if known is not None:
             missing: dict[str, Any] = {}
             if row.name and not (known.first_name or known.last_name):
-                missing.update(first_name=first_name, last_name=last_name.strip())
+                missing["first_name"] = name
             if row.qth and not known.city:
                 missing["city"] = row.qth
             if missing:
@@ -1576,8 +1614,7 @@ def _remember_in_address_book(row: QsoRow) -> None:
             return
         ContactService.create(
             base,
-            first_name=first_name,
-            last_name=last_name.strip(),
+            first_name=name,
             city=row.qth,
             country=row.country,
             gridsquare=row.gridsquare,
@@ -1769,6 +1806,47 @@ class QsoService:
             if operator_id is not None:
                 stmt = stmt.where(Qso.operator_id == operator_id)
             return _to_rows(session, list(session.scalars(stmt)))
+
+    @staticmethod
+    def card(qso_id: int) -> QsoCard | None:
+        """Everything about a QSO: the station worked, ours, and the setup."""
+        with session_scope() as session:
+            qso = session.scalars(
+                select(Qso)
+                .options(
+                    joinedload(Qso.operator),
+                    joinedload(Qso.station).selectinload(Station.types),
+                    joinedload(Qso.antenna),
+                    joinedload(Qso.repeater),
+                    *_EQUIPMENT_LOAD,
+                    selectinload(Qso.equipment).selectinload(Equipment.supplies),
+                )
+                .where(Qso.id == qso_id)
+            ).first()
+            if qso is None:
+                return None
+            row = _to_rows(session, [qso])[0]
+            contact = session.scalars(
+                select(Contact).where(Contact.base_call == qso.base_call).limit(1)
+            ).first() if qso.base_call else None
+            setup = qso.equipment
+            operator = qso.operator
+            return QsoCard(
+                row=row,
+                contact=_contact_to_row(contact) if contact else None,
+                operator_name=operator.name if operator else "",
+                operator_gridsquare=operator.gridsquare if operator else "",
+                operator_qth=operator.qth if operator else "",
+                power_w=qso.power_w,
+                station=_radio_part(qso.station) if qso.station else None,
+                antenna=_antenna_part(qso.antenna) if qso.antenna else None,
+                repeater=_repeater_summary(qso.repeater) if qso.repeater else "",
+                setup_name=setup.name if setup else "",
+                setup_notes=setup.notes if setup else "",
+                radios=tuple(_radio_part(s) for s in setup.stations) if setup else (),
+                antennas=tuple(_antenna_part(a) for a in setup.antennas) if setup else (),
+                supplies=tuple(_supply_part(s) for s in setup.supplies) if setup else (),
+            )
 
     @staticmethod
     def get(qso_id: int) -> QsoRow | None:

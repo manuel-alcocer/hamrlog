@@ -102,6 +102,28 @@ aplicación de terminal. Si quieres las métricas o la API, instala con pip.
 
 ## Uso
 
+### Probarlo sin tocar nada: la demo
+
+```bash
+hamrlog --demo            # en inglés
+hamrlog --demo --lang=es  # o:  hamrlog -d -l es
+```
+
+Abre un diario de demostración: un operador, cuatro equipos montados con el
+catálogo, cinco perfiles, unos sesenta contactos en la agenda y 160 QSO de
+agosto y septiembre en HF, repetidores de FM y DMR. **Todo es inventado**:
+indicativos, nombres y QSO.
+
+En la demo **no se guarda nada**. Puedes registrar, editar, borrar o cambiar
+la configuración; al salir se descarta, y la siguiente demo empieza siempre
+con los mismos datos. La línea de estado lo recuerda con `DEMO`.
+
+Los datos están en el repositorio (`hamrlog/data/demo/demo.json`). Con ellos
+el instalador prepara una base de datos plantilla en la carpeta de datos
+(`demo/hamrlog-demo.sqlite3`), y cada demo trabaja sobre una copia temporal.
+Si falta o es de otra versión, la primera demo la crea; `hamrlog build-demo`
+la rehace a mano.
+
 ### La pantalla principal
 
 El recuadro **Registro** tiene dos mitades: arriba la lista de QSO, abajo el
@@ -230,12 +252,18 @@ quién es.
 | `F3` | **Agenda** de contactos |
 | `F4` | **Perfiles** |
 | `F5` | **Repetidores** |
+| `F8` | **Herramientas** (código Q) |
+| `F9` | **Configuración** |
 | `Ctrl+N` | Pestaña siguiente, en las secciones que tienen pestañas |
 | `Ctrl+0` … `Ctrl+9` | Activan el perfil con esa tecla, desde cualquier ventana |
 | `RePág` `AvPág` | Recorren el histórico página a página |
 | `Ctrl+Q` | Salir |
 
-Las teclas `F1` a `F5` llevan a su sección desde cualquier otra.
+Las teclas `F1` a `F5`, `F8` y `F9` llevan a su sección desde cualquier otra.
+
+En el registro, una línea discontinua gris separa los QSO de días distintos
+(UTC); las flechas la saltan. Se
+quita en [Configuración](#configuración-f9).
 
 Lo que hereda cada QSO se cambia con comandos.
 
@@ -377,11 +405,37 @@ otro DMR y otro C4FM). Cuando pasa, se distinguen añadiendo la frecuencia de
 salida, el modo o la banda: `/repetidor ED4ZAH DMR`, `/repetidor ED4ZAH
 438.325`; en la casilla REPETIDOR de un perfil, igual.
 
+### Herramientas (`F8`)
+
+Utilidades de consulta, una por pestaña; de momento, el **código Q**. La
+lista es de solo lectura: lo que escribes en la casilla FILTRO la acota al
+momento (`qsy`, `potencia`, `frecuencia`), y `↑` `↓` la recorren sin salir
+de la casilla. El detalle muestra el código como afirmación y como pregunta.
+
+### Configuración (`F9`)
+
+Una fila por ajuste; `Enter` o `E` pone su valor en la casilla VALOR,
+`Enter` lo guarda y `Esc` cancela.
+
+| Ajuste | Qué hace | Se aplica |
+|---|---|---|
+| Base de datos | Fichero SQLite del diario (o una URL completa); vacío usa el de siempre | Al volver a arrancar |
+| Idioma | `en`, `es`, o vacío para seguir al sistema | Al volver a arrancar |
+| Zona horaria | Una zona como `Europe/Madrid`: su hora sale en la línea de estado junto a la UTC; vacío, solo UTC | Al momento |
+| Separador de días | `sí` o `no`: la línea discontinua entre los QSO de días distintos | Al momento |
+
+Se guardan en `config.json`, en la carpeta de configuración
+(`~/.config/hamrlog/` en Linux, `%APPDATA%\hamrlog\` en Windows), y no en la
+base de datos, porque uno de ellos dice qué base de datos abrir. Las
+variables `HAMRLOG_DATABASE_URL` y `HAMRLOG_LANG` mandan sobre el fichero.
+
 ### Idioma
 
 La interfaz está en inglés y en español. Se elige sola según el idioma del
-sistema (`LANG` en Linux, el idioma de la interfaz en Windows);
-`HAMRLOG_LANG=en` o `HAMRLOG_LANG=es` la fuerza. Las
+sistema (`LANG` en Linux, el idioma de la interfaz en Windows), salvo que la
+fijes en [Configuración](#configuración-f9); `HAMRLOG_LANG=en` o
+`HAMRLOG_LANG=es`, o `--lang` al arrancar (`hamrlog -l en`), la fuerza por
+encima de todo. Las
 traducciones son ficheros `.po` en `hamrlog/locales/`.
 
 ### Comandos
@@ -596,6 +650,9 @@ por operador.
 
 ```bash
 hamrlog                                      # abre la interfaz
+hamrlog -l en                                # en inglés, solo esta vez
+hamrlog --demo -l es                         # la demo, en español; no guarda nada
+hamrlog build-demo                           # rehace la base de datos de la demo
 hamrlog info                                 # rutas, base de datos y versión
 hamrlog export log.adi                       # exporta todo el log a ADIF
 hamrlog export --format csv log.csv          # exporta a CSV
@@ -626,7 +683,9 @@ export HAMRLOG_DATABASE_URL=postgresql+psycopg://usuario:clave@servidor/hamrlog
 ```
 
 La segunda permite usar PostgreSQL sin tocar una línea de código, que es lo
-que necesitarías para compartir el log entre varios equipos.
+que necesitarías para compartir el log entre varios equipos. El fichero de la
+base de datos también se elige en [Configuración](#configuración-f9); la
+variable, si está, manda.
 
 ## Integraciones
 

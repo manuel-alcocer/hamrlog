@@ -279,12 +279,13 @@ def test_export_then_import_round_trips(tmp_path):
 def test_working_a_new_station_adds_it_to_the_book(state):
     """The book grows with the log: a callsign worked is a callsign known."""
     assert ContactService.count() == 0
-    QsoService.log(parse("ea4abc,Juan Garcia,59,57,Madrid", mode_name="SSB").fields, state)
+    QsoService.log(parse("ea4abc,Jose  Manuel,59,57,Madrid", mode_name="SSB").fields, state)
 
     entry = ContactService.lookup("EA4ABC")
     assert entry is not None
-    assert entry.first_name == "Juan"
-    assert entry.last_name == "Garcia"
+    # The name heard on air is a name, whole: never split into a surname.
+    assert entry.first_name == "Jose Manuel"
+    assert entry.last_name == ""
     assert entry.city == "Madrid"
     assert entry.country == "Spain"
     assert entry.source == "log"
@@ -364,9 +365,9 @@ def test_logging_fills_what_the_book_entry_lacks_and_nothing_else(state):
     entry = ContactService.lookup("EA7LFZ")
     assert (entry.first_name, entry.city) == ("", "")
 
-    QsoService.log({"call": "EA7LFZ", "name": "Luis", "qth": "Cádiz"}, state)
+    QsoService.log({"call": "EA7LFZ", "name": "Luis Miguel", "qth": "Cádiz"}, state)
     entry = ContactService.lookup("EA7LFZ")
-    assert (entry.first_name, entry.city) == ("Luis", "Cádiz")
+    assert (entry.first_name, entry.last_name, entry.city) == ("Luis Miguel", "", "Cádiz")
     # The earlier QSO is left as it was logged.
     earlier = QsoService.get(first.id)
     assert (earlier.name, earlier.qth) == ("", "")
@@ -374,7 +375,7 @@ def test_logging_fills_what_the_book_entry_lacks_and_nothing_else(state):
     # What the book already has is not replaced by a later QSO.
     QsoService.log({"call": "EA7LFZ/P", "name": "Otro", "qth": "Jerez"}, state)
     entry = ContactService.lookup("EA7LFZ")
-    assert (entry.first_name, entry.city) == ("Luis", "Cádiz")
+    assert (entry.first_name, entry.city) == ("Luis Miguel", "Cádiz")
 
 
 def test_an_entry_with_a_name_still_takes_a_missing_qth(state):

@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from sqlalchemy import Engine, create_engine, event, make_url, select
 from sqlalchemy.orm import Session, sessionmaker
 
+from .. import appconfig
 from ..paths import database_path, ensure_dirs
 from .codes import assign_missing_codes
 from .migrations import add_missing_columns, upgrade_data
@@ -26,10 +27,15 @@ _session_factory: sessionmaker[Session] | None = None
 
 
 def default_database_url() -> str:
-    """Database URL from the environment, or the local SQLite file."""
+    """Database URL from the environment, the settings (F9), or the local file."""
     url = os.environ.get("HAMRLOG_DATABASE_URL")
     if url:
         return url
+    config = appconfig.load()
+    if config.database_url:
+        if config.database_path is not None:
+            config.database_path.parent.mkdir(parents=True, exist_ok=True)
+        return config.database_url
     ensure_dirs()
     # as_posix() keeps the URL valid on Windows, where paths use backslashes.
     return f"sqlite:///{database_path().as_posix()}"

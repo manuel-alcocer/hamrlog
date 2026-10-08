@@ -79,6 +79,15 @@ class Kind:
     fields: tuple[str, ...] = ()
     #: (heading, width); None takes the remaining width.
     columns: tuple[tuple[str, int | None], ...] = ()
+    #: False for lists the operator cannot add to: no insert row.
+    can_add: bool = True
+    #: False for lists whose rows cannot be deleted.
+    can_delete: bool = True
+    #: False for read-only lists: the cursor moves over them while the entry
+    #: line keeps the keyboard as a filter box, instead of the action bar.
+    browses: bool = True
+    #: Headings of the columns aligned to the right, numbers mostly.
+    right_aligned: frozenset[str] = frozenset()
     #: Boxes of a second row, always shown, for lists with many fields.
     second_row: tuple[str, ...] = ()
     #: True when the list is searched with /search rather than shown whole.
@@ -505,14 +514,17 @@ def tab_bar(
     query: str = "",
     shown: int = 0,
     total: int = 0,
+    *,
+    show_tabs: bool = False,
 ) -> Text:
     """The row at the top of a list view.
 
-    The tab names, the active one marked, when the view has several lists;
-    then the brand filter, or the search and how much of it is shown.
+    The tab names, the active one marked, when the view has several lists
+    (or ``show_tabs``); then the brand filter, or the search or the filter
+    and how much of it is shown.
     """
     text = Text(no_wrap=True, overflow="ellipsis")
-    if len(kinds) > 1:
+    if len(kinds) > 1 or show_tabs:
         for index, kind in enumerate(kinds):
             if index:
                 text.append("  ")
@@ -522,6 +534,13 @@ def tab_bar(
                 text.append(f" {_(kind.title)} ", style="bold")
         text.append("   ")
     kind = kinds[active]
+    if not kind.browses:
+        if shown < total:
+            text.append(
+                _("{shown} of {total}").format(shown=shown, total=total), style="dim"
+            )
+        else:
+            text.append(_(kind.count_text).format(total=total), style="dim")
     if kind.has_brands:
         text.append(f"{_('BRAND')} ", style="dim")
         text.append(brand or _("all"), style="bold yellow" if brand else "dim")

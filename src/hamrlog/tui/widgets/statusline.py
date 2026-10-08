@@ -21,14 +21,21 @@ class StatusLine(Static):
     digital_summary: reactive[str] = reactive("")
     station: reactive[str] = reactive("")
     profile: reactive[str] = reactive("")
+    #: A demo run: nothing typed is kept, and the line says so first.
+    demo: reactive[bool] = reactive(False)
 
     def render(self) -> Text:
         text = Text(no_wrap=True, overflow="ellipsis")
+        if self.demo:
+            text.append(f" {_('DEMO')} ", style="bold black on yellow")
+            text.append(" ")
+        # Where the chunks start: the separator goes between them only.
+        start = len(text)
 
         def chunk(label: str, value: str, style: str = "bold white") -> None:
             if not value:
                 return
-            if text.plain:
+            if len(text) > start:
                 text.append(" · ", style="dim")
             if label:
                 text.append(f"{label} ", style="dim")

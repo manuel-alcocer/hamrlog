@@ -7,9 +7,10 @@ a cron job, which is the same surface a future API would expose.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 
-from . import __version__
+from . import __version__, i18n
 from .core import contacts as contact_files
 from .db.session import default_database_url, init_engine
 from .i18n import _
@@ -56,10 +57,28 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="URL",
         help=_("SQLAlchemy URL of the database (local SQLite by default)."),
     )
+    parser.add_argument(
+        "-d",
+        "--demo",
+        action="store_true",
+        help=_(
+            "Open a demo log with invented data. Nothing is saved: every demo "
+            "starts with the same data."
+        ),
+    )
+    parser.add_argument(
+        "-l",
+        "--lang",
+        choices=i18n.AVAILABLE,
+        help=_("Language of the interface (English in the demo unless given)."),
+    )
 
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("run", help=_("Open the text interface (default)."))
     sub.add_parser("info", help=_("Show paths, database and version."))
+    sub.add_parser(
+        "build-demo", help=_("Build the demo database again (the installer does it).")
+    )
 
     export = sub.add_parser("export", help=_("Export the log without opening the interface."))
     export.add_argument("path", nargs="?", help=_("Destination file."))
@@ -111,6 +130,24 @@ def _build_parser() -> argparse.ArgumentParser:
     contacts_list.add_argument("--limit", type=int, default=50, help=_("Maximum number of rows."))
 
     return parser
+
+
+def _run_demo(language: str | None) -> int:
+    from . import demo
+    from .tui.app import HamrlogApp
+
+    with demo.session(language):
+        i18n.set_language(language or demo.DEFAULT_LANGUAGE)
+        HamrlogApp(demo=True).run(mouse=False)
+    return 0
+
+
+def _cmd_build_demo() -> int:
+    from . import demo
+
+    path = demo.build_template()
+    print(_("Demo database ready: {path}").format(path=path))
+    return 0
 
 
 def _cmd_info() -> int:
@@ -208,10 +245,22 @@ def _cmd_metrics(port: int) -> int:
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns the process exit code."""
     _configure_console()
-    args = _build_parser().parse_args(argv)
-    init_engine(args.database)
-
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     command = args.command or "run"
+
+    if args.lang:
+        # Through the environment, which wins over the settings, for this run.
+        os.environ[i18n.LANG_ENV] = args.lang
+        i18n.set_language(args.lang)
+    if args.demo:
+        if command != "run" or args.database:
+            parser.error(_("--demo only opens the interface, on its own database."))
+        return _run_demo(args.lang)
+    if command == "build-demo":
+        return _cmd_build_demo()
+
+    init_engine(args.database)
     if command == "info":
         return _cmd_info()
     if command == "export":

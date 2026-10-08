@@ -90,6 +90,39 @@ class ContactRow:
 
 
 @dataclass(frozen=True, slots=True)
+class PartRow:
+    """A radio, antenna or supply as the QSO card lists it."""
+
+    code: str
+    name: str
+    #: Power and ranges, bands, or voltage and current.
+    details: str = ""
+
+
+@dataclass(frozen=True, slots=True)
+class QsoCard:
+    """Everything known about a logged QSO, for the card V opens."""
+
+    row: QsoRow
+    #: The station worked, as the address book has it.
+    contact: ContactRow | None = None
+    operator_name: str = ""
+    operator_gridsquare: str = ""
+    operator_qth: str = ""
+    power_w: int | None = None
+    #: Radio and antenna of the QSO when it has no setup (older QSOs).
+    station: PartRow | None = None
+    antenna: PartRow | None = None
+    #: The repeater: «ED7ZAL · out 145.600 · in 145.000 · tone 88.5».
+    repeater: str = ""
+    setup_name: str = ""
+    setup_notes: str = ""
+    radios: tuple[PartRow, ...] = ()
+    antennas: tuple[PartRow, ...] = ()
+    supplies: tuple[PartRow, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class ImportSummary:
     """Outcome of importing an address book file."""
 

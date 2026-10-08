@@ -134,8 +134,19 @@ una `Kind` (`tui/inventory.py`) que declara columnas, casillas y cómo se
 guardan; la navegación, la fila `<Nuevo …>`, la barra de acciones y la edición
 son las del registro. Lo escrito a medias se guarda por vista y pestaña. La
 Agenda (`F3`, `tui/address_book.py`), los Perfiles (`F4`, `tui/profiles.py`)
-y los Repetidores (`F5`, `tui/repeaters.py`) son otras `Kind` sobre el mismo
-mecanismo.
+los Repetidores (`F5`, `tui/repeaters.py`), las Herramientas (`F8`,
+`tui/tools.py`) y la Configuración (`F9`, `tui/settings.py`) son otras `Kind`
+sobre el mismo mecanismo. Una `Kind` puede no admitir altas (`can_add`, sin
+fila `<Nuevo …>`) ni bajas (`can_delete`), o ser de solo lectura
+(`browses=False`): entonces la línea de entrada es una casilla que filtra la
+lista mientras se escribe, y las flechas la recorren sin pasar a la barra de
+acciones.
+
+**La configuración de la aplicación no está en la base de datos.** La ruta
+de la base de datos, el idioma, la zona horaria y el separador de días viven
+en `config.json` (`hamrlog/appconfig.py`), en la carpeta de configuración:
+la base de datos no puede guardar su propia ruta y el idioma hace falta antes
+de pintar nada. Las variables de entorno mandan sobre el fichero.
 
 **El perfil activo es el estado de la sesión.** Activar un perfil
 (`ProfileService.apply_to_state`) copia sus valores en `SessionState`, y

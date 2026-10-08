@@ -30,7 +30,7 @@ from ...i18n import N_, _
 
 #: Keys that act on the QSO under the cursor while browsing the log.
 BROWSE_ACTIONS: dict[str, str] = {
-    "d": "delete", "e": "edit", "r": "repeat", " ": "mark", "*": "default",
+    "d": "delete", "e": "edit", "r": "repeat", " ": "mark", "*": "default", "v": "view",
 }
 
 #: The only boxes an edit of several QSOs at once offers.
@@ -38,7 +38,9 @@ BULK_FIELDS: tuple[str, ...] = ("freq_hz", "mode", "equipment")
 
 #: What the entry line offers while the cursor sits on a logged QSO. The
 #: prompts and help lines below are translated where they are shown.
-BROWSE_PROMPT = N_("D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing")
+BROWSE_PROMPT = N_(
+    "V view · D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing"
+)
 
 #: Offered on a second row while editing, unless the entry line has them.
 #: The band is not among them: the application works it out from the frequency.
@@ -95,6 +97,10 @@ FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
     "ure_number": ("URE", 6),
     "channel": (N_("CHANNEL"), 8),
     "owner": (N_("OWNER"), 24),
+    # Tools view (F8): the filter box of a read-only list.
+    "filter": (N_("FILTER"), None),
+    # Settings view (F9).
+    "value": (N_("VALUE"), None),
 }
 
 DEFAULT_LAYOUT: tuple[str, int | None] = (N_("FIELD"), 12)

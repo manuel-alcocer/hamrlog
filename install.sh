@@ -75,9 +75,15 @@ fi
 
 info "Instalado: $HAMRLOG_PATH"
 
+# The demo (hamrlog --demo) opens a copy of a database built from the data in
+# the repository; built now, the first demo starts at once. Not fatal: the
+# demo builds it itself when it is missing.
+info "Preparando la base de datos de demostración"
+"$HAMRLOG_PATH" build-demo >/dev/null 2>&1 || warn "No se pudo preparar la demo; se creará al usarla."
+
 if ! command -v hamrlog >/dev/null 2>&1; then
     warn "$BIN_DIR no está en el PATH. Añade esta línea a tu ~/.bashrc o ~/.zshrc:"
     printf '\n    export PATH="%s:$PATH"\n\n' "$BIN_DIR"
 fi
 
-info "Arráncalo con:  hamrlog"
+info "Arráncalo con:  hamrlog      (o pruébalo con:  hamrlog --demo -l es)"

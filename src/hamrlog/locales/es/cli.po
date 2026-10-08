@@ -128,3 +128,18 @@ msgstr "La API necesita el extra: pip install hamrlog[api]"
 
 msgid "Contact not found"
 msgstr "Contacto no encontrado"
+
+msgid "Open a demo log with invented data. Nothing is saved: every demo starts with the same data."
+msgstr "Abre un diario de demostración con datos inventados. No se guarda nada: cada demo empieza con los mismos datos."
+
+msgid "Language of the interface (English in the demo unless given)."
+msgstr "Idioma de la interfaz (en la demo, inglés si no se indica)."
+
+msgid "Build the demo database again (the installer does it)."
+msgstr "Vuelve a construir la base de datos de la demo (lo hace el instalador)."
+
+msgid "Demo database ready: {path}"
+msgstr "Base de datos de la demo lista: {path}"
+
+msgid "--demo only opens the interface, on its own database."
+msgstr "--demo solo abre la interfaz, con su propia base de datos."

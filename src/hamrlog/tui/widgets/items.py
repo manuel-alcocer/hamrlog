@@ -36,6 +36,7 @@ class ItemTable(DataTable):
     def __init__(self, **kwargs: object) -> None:
         super().__init__(**kwargs)  # type: ignore[arg-type]
         self._items: dict[str, Item] = {}
+        self._has_insert_row = True
 
     def on_mount(self) -> None:
         self.cursor_type = "row"
@@ -48,13 +49,36 @@ class ItemTable(DataTable):
     def show(self, kind: Kind, items: list[Item], keep_id: int | None = None) -> None:
         """Replace the list, keeping the cursor on ``keep_id`` when given."""
         self.clear(columns=True)
-        for label, width in kind.columns:
-            self.add_column(Text(_(label), style="bold"), width=width, key=label)
+        justify = [
+            "right" if label in kind.right_aligned else "left" for label, _width in kind.columns
+        ]
+        for (label, width), side in zip(kind.columns, justify, strict=True):
+            self.add_column(
+                Text(_(label), style="bold", justify=side), width=width, key=label
+            )
         self._items = {}
         for item in items:
             style = "dim" if item.locked else ""
-            self.add_row(*(Text(cell or "", style=style) for cell in item.cells), key=str(item.id))
+            self.add_row(
+                *(
+                    Text(cell or "", style=style, justify=side)
+                    for cell, side in zip(item.cells, justify, strict=False)
+                ),
+                key=str(item.id),
+            )
             self._items[str(item.id)] = item
+        self._has_insert_row = kind.can_add
+        if kind.can_add:
+            self._add_insert_row(kind)
+
+        # Without an insert row the cursor starts on the first item.
+        target = self.row_count - 1 if kind.can_add else 0
+        if keep_id is not None and str(keep_id) in self._items:
+            target = self.get_row_index(str(keep_id))
+        self.move_cursor(row=target, scroll=True)
+        self.post_message(self.SelectionChanged(self.selected_item()))
+
+    def _add_insert_row(self, kind: Kind) -> None:
         # The label goes in the widest column, where it is not cut short,
         # unless the kind names one.
         widest = kind.insert_column
@@ -66,13 +90,10 @@ class ItemTable(DataTable):
         cells[widest] = Text(f"▸ {_(kind.insert_label)}", style="bold green")
         self.add_row(*cells, key=INSERT_ROW_KEY)
 
-        target = self.row_count - 1
-        if keep_id is not None and str(keep_id) in self._items:
-            target = self.get_row_index(str(keep_id))
-        self.move_cursor(row=target, scroll=True)
-        self.post_message(self.SelectionChanged(self.selected_item()))
-
     def go_to_insert_row(self) -> None:
+        """Back to the insert row; a list without one stays where it is."""
+        if not self._has_insert_row:
+            return
         if self.row_count:
             self.move_cursor(row=self.row_count - 1, scroll=True)
         self.post_message(self.SelectionChanged(None))

@@ -115,6 +115,7 @@ class ProfileKind(Kind):
         (N_("PWR"), 5),
         (N_("DIGITAL"), None),
     )
+    right_aligned = frozenset({"PWR"})
 
     def __init__(self) -> None:
         #: The profile the session has active, marked in the list.

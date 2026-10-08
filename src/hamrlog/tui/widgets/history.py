@@ -14,8 +14,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from rich.segment import Segment
+from rich.style import Style
 from rich.text import Text
 from textual.message import Message
+from textual.strip import Strip
 from textual.widgets import DataTable
 
 from ...core import bands, units
@@ -61,6 +64,13 @@ FLAG_DRIFT = "d"
 #: text: the English order is year first, the Spanish one day first.
 DATE_FORMAT = N_("%y/%m/%d %H:%M")
 
+#: Row keys of the lines between days start with this; a number follows.
+DAY_ROW_PREFIX = "__day__"
+
+#: The line between days: dashed, dark grey, across the whole width.
+DAY_SEPARATOR_CHAR = "┄"
+DAY_SEPARATOR_STYLE = Style(color="grey30")
+
 
 class HistoryPanel(DataTable):
     """Read-only log view with an insert row at the writing end."""
@@ -80,6 +90,8 @@ class HistoryPanel(DataTable):
         self._rows: list[QsoRow] = []
         #: Ids of the QSOs selected with Space or Ctrl+A.
         self.marked: set[int] = set()
+        #: Draw a dashed line between the QSOs of different days.
+        self.day_separator = True
 
     def on_mount(self) -> None:
         self.cursor_type = "row"
@@ -122,7 +134,25 @@ class HistoryPanel(DataTable):
     @property
     def on_insert_row(self) -> bool:
         """True when the cursor is on ``<Insert new>``."""
-        return self.selected_qso_id() is None
+        return self._key_at(self.cursor_row) == INSERT_ROW_KEY
+
+    def _key_at(self, row_index: int) -> str | None:
+        try:
+            return self.coordinate_to_cell_key((row_index, 0)).row_key.value
+        except Exception:  # noqa: BLE001 - out of range or stale after a reload
+            return None
+
+    def is_day_row(self, row_index: int) -> bool:
+        """Whether the row is a line between days, never a place to stop."""
+        key = self._key_at(row_index)
+        return key is not None and key.startswith(DAY_ROW_PREFIX)
+
+    def set_day_separator(self, enabled: bool) -> None:
+        """Show or hide the line between days, redrawing if it changed."""
+        if enabled == self.day_separator:
+            return
+        self.day_separator = enabled
+        self.load(self._rows)
 
     def set_order(self, order: str) -> None:
         """Change the direction and redraw, staying on the insert row."""
@@ -148,8 +178,16 @@ class HistoryPanel(DataTable):
         )
         if self.order == ORDER_NEWEST_FIRST:
             self._add_insert_row()
-        for row in ordered:
+        previous: QsoRow | None = None
+        for number, row in enumerate(ordered):
+            if (
+                self.day_separator
+                and previous is not None
+                and previous.qso_utc.date() != row.qso_utc.date()
+            ):
+                self.add_row(*(Text("") for _ in COLUMNS), key=f"{DAY_ROW_PREFIX}{number}")
             self._append(row)
+            previous = row
         if self.order == ORDER_OLDEST_FIRST:
             self._add_insert_row()
 
@@ -175,7 +213,13 @@ class HistoryPanel(DataTable):
         """
         if not self.row_count:
             return
-        target = max(0, min(self.row_count - 1, self.cursor_row + delta))
+        last = self.row_count - 1
+        target = max(0, min(last, self.cursor_row + delta))
+        if self.is_day_row(target):
+            # Past the line in the direction of travel; at an end, back.
+            step = 1 if delta >= 0 else -1
+            ahead = target + step
+            target = ahead if 0 <= ahead <= last else target - step
         if target != self.cursor_row:
             self.move_cursor(row=target, scroll=True)
         self.post_message(self.SelectionChanged(self.selected_qso_id()))
@@ -189,7 +233,7 @@ class HistoryPanel(DataTable):
         except Exception:  # noqa: BLE001 - cursor may be stale after a reload
             return None
         value = row_key.value
-        if value is None or value == INSERT_ROW_KEY:
+        if value is None or value == INSERT_ROW_KEY or value.startswith(DAY_ROW_PREFIX):
             return None
         return int(value)
 
@@ -201,6 +245,24 @@ class HistoryPanel(DataTable):
         return next((row for row in self._rows if row.id == qso_id), None)
 
     # ------------------------------------------------------------ drawing --
+    def _render_line(self, y: int, x1: int, x2: int, base_style: Style) -> Strip:
+        """A line between days is drawn across the whole width, dashed.
+
+        Drawn as cells it would break at every column gap; and no colour can
+        be given to an underline, so the line has a row of its own.
+        """
+        try:
+            row_key, _offset = self._get_offsets(y)
+        except LookupError:
+            return super()._render_line(y, x1, x2, base_style)
+        value = row_key.value
+        if value is None or not value.startswith(DAY_ROW_PREFIX):
+            return super()._render_line(y, x1, x2, base_style)
+        width = self.size.width
+        return Strip(
+            [Segment(DAY_SEPARATOR_CHAR * width, base_style + DAY_SEPARATOR_STYLE)], width
+        )
+
     def _add_insert_row(self) -> None:
         """Draw the row that stands for the QSO about to be written.
 

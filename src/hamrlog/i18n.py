@@ -47,8 +47,10 @@ WINDOWS_NAMES = {"spanish": "es", "english": "en"}
 
 
 def detect_language() -> str:
-    """The language to use: HAMRLOG_LANG, then the system's, then English."""
-    candidates = [os.environ.get(LANG_ENV, "")]
+    """The language to use: HAMRLOG_LANG, the settings (F9), the system's, English."""
+    from . import appconfig
+
+    candidates = [os.environ.get(LANG_ENV, ""), appconfig.load().language]
     candidates += [os.environ.get(name, "") for name in ("LC_ALL", "LC_MESSAGES", "LANG")]
     candidates.append(_windows_ui_language())
     try:

@@ -546,10 +546,6 @@ msgstr "informe por defecto {rst}"
 msgid "via {call}"
 msgstr "vía {call}"
 
-#: src/hamrlog/tui/widgets/entry.py:36
-msgid "D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing"
-msgstr "D suprimir · E editar · R repetir · Espacio marca · Ctrl+A todos · ↓ volver a escribir"
-
 #: src/hamrlog/tui/widgets/entry.py:76
 msgid "FIELD"
 msgstr "CAMPO"
@@ -802,15 +798,6 @@ msgstr "{total} contactos"
 msgid "d: the address book says «{name}»"
 msgstr "d: en la agenda es «{name}»"
 
-msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · Ctrl+Q Quit"
-msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · Ctrl+Q Salir"
-
-msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters"
-msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores"
-
-msgid "F1 Log F2 Inv F3 Book F4 Prof F5 Rptr"
-msgstr "F1 Reg F2 Inv F3 Agenda F4 Perf F5 Rep"
-
 msgid "PROFILE"
 msgstr "PERFIL"
 
@@ -973,3 +960,225 @@ msgstr "Detalle"
 
 msgid "Entry"
 msgstr "Entrada"
+
+msgid "Tools: type in the box to narrow the list · ↑↓ move through it"
+msgstr "Herramientas: escribe en la casilla para acotar la lista · ↑↓ para recorrerla"
+
+msgid "Settings: Enter or E changes the one under the cursor, Enter saves it, Esc cancels"
+msgstr "Configuración: Enter o E cambia la del cursor, Enter la guarda, Esc cancela"
+
+msgid "Enter or E change"
+msgstr "Enter o E cambiar"
+
+msgid "Tools"
+msgstr "Herramientas"
+
+msgid "Settings"
+msgstr "Configuración"
+
+msgid "Settings are changed, not deleted."
+msgstr "La configuración se cambia, no se borra."
+
+msgid "{shown} of {total}"
+msgstr "{shown} de {total}"
+
+msgid "takes effect the next time hamrlog starts"
+msgstr "se aplica la próxima vez que arranque hamrlog"
+
+msgid "takes effect at once"
+msgstr "se aplica al momento"
+
+msgid "English"
+msgstr "inglés"
+
+msgid "Spanish"
+msgstr "español"
+
+msgid "on"
+msgstr "sí"
+
+msgid "off"
+msgstr "no"
+
+msgid "SETTING"
+msgstr "AJUSTE"
+
+msgid "VALUE"
+msgstr "VALOR"
+
+msgid "APPLIES"
+msgstr "SE APLICA"
+
+msgid "Database"
+msgstr "Base de datos"
+
+msgid "automatic ({language})"
+msgstr "automático ({language})"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "Time zone"
+msgstr "Zona horaria"
+
+msgid "Day separator"
+msgstr "Separador de días"
+
+msgid "SQLite file of the log; empty uses the default one"
+msgstr "Fichero SQLite del diario; vacío usa el predeterminado"
+
+msgid "A path such as ~/radio/hamrlog.sqlite3, or a full database URL"
+msgstr "Una ruta como ~/radio/hamrlog.sqlite3, o una URL de base de datos completa"
+
+msgid "Language of the interface: en, es, or empty to follow the system"
+msgstr "Idioma de la interfaz: en, es, o vacío para seguir al sistema"
+
+msgid "The HAMRLOG_LANG variable, when set, takes precedence"
+msgstr "La variable HAMRLOG_LANG, si está definida, tiene prioridad"
+
+msgid "UTC only"
+msgstr "solo UTC"
+
+msgid "Local time shown on the status line next to UTC"
+msgstr "Hora local que muestra la línea de estado junto a la UTC"
+
+msgid "A zone such as Europe/Madrid or Atlantic/Canary; empty shows UTC only"
+msgstr "Una zona como Europe/Madrid o Atlantic/Canary; vacío muestra solo UTC"
+
+msgid "A dashed grey line in the log between the QSOs of different days (UTC)"
+msgstr "Una línea discontinua gris en el diario entre los QSO de días distintos (UTC)"
+
+msgid "on or off"
+msgstr "sí o no"
+
+msgid "default: {path}"
+msgstr "predeterminada: {path}"
+
+msgid "Settings are changed, not added."
+msgstr "La configuración se cambia, no se añade."
+
+msgid "Unknown language: «{text}». Use en, es, or leave it empty."
+msgstr "Idioma desconocido: «{text}». Usa en, es, o déjalo vacío."
+
+msgid "Type on or off."
+msgstr "Escribe sí o no."
+
+msgid "Unknown time zone: «{text}». Use a name such as Europe/Madrid."
+msgstr "Zona horaria desconocida: «{text}». Usa un nombre como Europe/Madrid."
+
+msgid "Q code"
+msgstr "Código Q"
+
+msgid "{total} codes"
+msgstr "{total} códigos"
+
+msgid "Q CODE   a statement; followed by «?», the question"
+msgstr "CÓDIGO Q   una afirmación; seguido de «?», la pregunta"
+
+msgid "Type in the box to narrow the list: the letters or any word of the meaning"
+msgstr "Escribe en la casilla para acotar la lista: las letras o cualquier palabra del significado"
+
+msgid "↑↓ move through the list"
+msgstr "↑↓ recorren la lista"
+
+msgid "CODE"
+msgstr "CÓDIGO"
+
+msgid "MEANING"
+msgstr "SIGNIFICADO"
+
+msgid "QUESTION"
+msgstr "PREGUNTA"
+
+msgid "FILTER"
+msgstr "FILTRO"
+
+msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · F8 Tools · F9 Settings · Ctrl+Q Quit"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · F8 Herramientas · F9 Configuración · Ctrl+Q Salir"
+
+msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · F8 Tools · F9 Settings"
+msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · F8 Herramientas · F9 Configuración"
+
+msgid "F1 Log F2 Inv F3 Book F4 Prof F5 Rptr F8 Tools F9 Set"
+msgstr "F1 Reg F2 Inv F3 Agen F4 Perf F5 Rep F8 Herr F9 Conf"
+
+msgid "V opens the card of a QSO, in the log: {keys}"
+msgstr "V abre la ficha de un QSO, en el registro: {keys}"
+
+msgid "CONTACT"
+msgstr "CONTACTO"
+
+msgid "Callsign"
+msgstr "Indicativo"
+
+msgid "Country"
+msgstr "País"
+
+msgid "manual"
+msgstr "manual"
+
+msgid "automatic"
+msgstr "automático"
+
+msgid "Date"
+msgstr "Fecha"
+
+msgid "Frequency"
+msgstr "Frecuencia"
+
+msgid "Mode"
+msgstr "Modo"
+
+msgid "Reports"
+msgstr "Informes"
+
+msgid "Digital"
+msgstr "Digital"
+
+msgid "Notes"
+msgstr "Notas"
+
+msgid "MY STATION"
+msgstr "MI ESTACIÓN"
+
+msgid "Operator"
+msgstr "Operador"
+
+msgid "Location"
+msgstr "Ubicación"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "Email"
+msgstr "Correo"
+
+msgid "Book notes"
+msgstr "Notas agenda"
+
+msgid "RADIO"
+msgstr "EMISORA"
+
+msgid "Radio"
+msgstr "Emisora"
+
+msgid "Antenna"
+msgstr "Antena"
+
+msgid "This QSO has no setup."
+msgstr "Este QSO no tiene equipo."
+
+msgid "SETUP «{name}»"
+msgstr "EQUIPO «{name}»"
+
+msgid "sent {rst}"
+msgstr "enviado {rst}"
+
+msgid "received {rst}"
+msgstr "recibido {rst}"
+
+msgid "V view · D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing"
+msgstr "V ver · D suprimir · E editar · R repetir · Espacio marca · Ctrl+A todos · ↓ volver a escribir"
+
+msgid "DEMO"
+msgstr "DEMO"

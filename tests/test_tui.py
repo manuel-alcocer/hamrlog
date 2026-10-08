@@ -410,25 +410,28 @@ async def test_footer_shows_how_to_quit(operator):
     from hamrlog.tui.widgets.footer import HELP_HINT, StatsFooter
 
     assert _(HELP_HINT) == (
-        "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · Ctrl+Q Salir"
+        "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores · "
+        "F8 Herramientas · F9 Configuración · Ctrl+Q Salir"
     )
     app = HamrlogApp()
-    async with app.run_test(size=(160, 30)) as pilot:
+    async with app.run_test(size=(200, 30)) as pilot:
         await pilot.pause()
         assert _(HELP_HINT) in str(app.query_one(StatsFooter).render())
     # Narrower: the keys of the views stay, the way out is in the help.
     app = HamrlogApp()
-    async with app.run_test(size=(145, 30)) as pilot:
-        await pilot.pause()
-        assert "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores" in str(
-            app.query_one(StatsFooter).render()
-        )
-    # Narrower still: every key keeps a short name of where it leads.
-    app = HamrlogApp()
-    async with app.run_test(size=(110, 30)) as pilot:
+    async with app.run_test(size=(175, 30)) as pilot:
         await pilot.pause()
         footer = str(app.query_one(StatsFooter).render())
-        assert "F1 Reg F2 Inv F3 Agenda F4 Perf F5 Rep" in footer
+        assert "F5 Repetidores · F8 Herramientas · F9 Configuración" in footer
+        assert "Ctrl+Q" not in footer
+    # Narrower still: every key keeps a short name of where it leads, and
+    # the counters close up and lose the date to make room for it.
+    app = HamrlogApp()
+    async with app.run_test(size=(108, 30)) as pilot:
+        await pilot.pause()
+        footer = str(app.query_one(StatsFooter).render())
+        assert "F1 Reg F2 Inv F3 Agen F4 Perf F5 Rep F8 Herr F9 Conf" in footer
+        assert "UTC" in footer
 
 
 async def test_history_ends_with_the_insert_row(operator):

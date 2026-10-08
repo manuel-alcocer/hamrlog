@@ -24,6 +24,8 @@ datas = textual_datas + [
     (str(SRC_DIR / "hamrlog" / "locales"), "hamrlog/locales"),
     # The equipment catalog loaded into the database at start.
     (str(SRC_DIR / "hamrlog" / "data" / "preseed"), "hamrlog/data/preseed"),
+    # The invented log of hamrlog --demo.
+    (str(SRC_DIR / "hamrlog" / "data" / "demo"), "hamrlog/data/demo"),
 ]
 
 hiddenimports = (

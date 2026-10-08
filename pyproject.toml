@@ -32,6 +32,8 @@ classifiers = [
 dependencies = [
     "textual>=1.0",
     "sqlalchemy>=2.0",
+    # The time zones of the settings (F9): Windows has no zone database.
+    "tzdata; sys_platform == 'win32'",
 ]
 
 [project.urls]

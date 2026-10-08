@@ -57,6 +57,9 @@ Screen {
 #detail {
     height: 5;
     padding: 0 1;
+    /* A long line (a path, a URL) is cut, never pushes the others out. */
+    text-wrap: nowrap;
+    text-overflow: ellipsis;
     background: $surface;
 }
 
@@ -168,6 +171,17 @@ Screen {
     border-title-color: $accent;
     border-title-style: bold;
     border-title-align: left;
+}
+
+/* The card of a QSO (V) floats in the middle of the log, which stays in view
+   around it; its lines scroll when the log is not tall enough. */
+.qso-card {
+    padding: 0 1;
+}
+
+.qso-card-body {
+    height: 1fr;
+    scrollbar-size-vertical: 1;
 }
 
 /* Transparent: everything around the panel stays in view, undimmed. */

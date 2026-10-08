@@ -15,6 +15,7 @@ from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.containers import Vertical
 
+from .. import appconfig
 from ..core import bands, callsign, modes
 from ..core import entry as entry_parser
 from ..core.services import (
@@ -38,6 +39,11 @@ from .profiles import PROFILE_KINDS, ProfileKind
 from .profiles import legend as profile_legend
 from .repeaters import REPEATER_KINDS
 from .screens.base import ConfirmScreen, Field, FormScreen, MainFrame
+from .screens.card import QsoCardScreen
+from .settings import DATABASE as DATABASE_SETTING
+from .settings import LANGUAGE as LANGUAGE_SETTING
+from .settings import RESTART_NOTE, SETTING_KINDS
+from .tools import TOOL_KINDS
 from .widgets.detail import DetailPanel
 from .widgets.entry import (
     BROWSE_PROMPT,
@@ -101,20 +107,40 @@ REPEATERS_SUMMARY = N_(
 )
 REPEATERS_BROWSE = N_("Enter tune · E edit · D delete · ↓ back to typing")
 
+#: ``/help`` in the tools view.
+TOOLS_SUMMARY = N_("Tools: type in the box to narrow the list · ↑↓ move through it")
+
+#: ``/help`` and the action bar of the settings view.
+SETTINGS_SUMMARY = N_(
+    "Settings: Enter or E changes the one under the cursor, Enter saves it, Esc cancels"
+)
+SETTINGS_BROWSE = N_("Enter or E change")
+
 #: The lists each list view shows, its title, and its ``/help``.
 LIST_VIEWS: dict[str, tuple[tuple[Kind, ...], str, str]] = {
     "inventory": (KINDS, N_("Inventory"), INVENTORY_SUMMARY),
     "contacts": (CONTACT_KINDS, N_("Address book"), CONTACTS_SUMMARY),
     "profiles": (PROFILE_KINDS, N_("Profiles"), PROFILES_SUMMARY),
     "repeaters": (REPEATER_KINDS, N_("Repeaters"), REPEATERS_SUMMARY),
+    "tools": (TOOL_KINDS, N_("Tools"), TOOLS_SUMMARY),
+    "settings": (SETTING_KINDS, N_("Settings"), SETTINGS_SUMMARY),
 }
 
+#: Views whose tab names show even when they have a single tab, because
+#: more are meant to follow.
+TABBED_VIEWS = frozenset({"tools"})
+
 #: Action bar over an item, per list view; INVENTORY_BROWSE otherwise.
-BROWSE_PROMPTS: dict[str, str] = {"profiles": PROFILES_BROWSE, "repeaters": REPEATERS_BROWSE}
+BROWSE_PROMPTS: dict[str, str] = {
+    "profiles": PROFILES_BROWSE,
+    "repeaters": REPEATERS_BROWSE,
+    "settings": SETTINGS_BROWSE,
+}
 
 #: The function key that opens each list view from the log.
 VIEW_KEYS: dict[str, str] = {
     "f2": "inventory", "f3": "contacts", "f4": "profiles", "f5": "repeaters",
+    "f8": "tools", "f9": "settings",
 }
 
 #: Shown when a command that needs a value is typed without one.
@@ -172,10 +198,12 @@ class HamrlogApp(App[None]):
         Binding("ctrl+q", "quit", N_("Quit"), priority=True),
     ]
 
-    def __init__(self, database_url: str | None = None) -> None:
+    def __init__(self, database_url: str | None = None, *, demo: bool = False) -> None:
         super().__init__()
         self.sub_title = _(self.SUB_TITLE)
         self.database_url = database_url
+        #: A demo run (``hamrlog --demo``): said on the status line.
+        self.demo = demo
         self.state = SessionState()
         self._line_history: list[dict[str, str]] = []
         self._history_index: int | None = None
@@ -218,11 +246,13 @@ class HamrlogApp(App[None]):
         self.state.apply_frequency_format()
         self._maybe_start_metrics()
         self.query_one(HistoryPanel).order = self.state.history_order
+        self._apply_config()
         self.query_one(HistoryPanel).load(QsoService.recent())
         self._refresh_status()
         self._refresh_stats()
         # Wait for the field boxes to exist before handing them the keyboard,
         # so nothing else can take it first.
+        self.query_one(StatusLine).demo = self.demo
         self.query_one("#log-frame", Vertical).border_title = _("Log")
         self.query_one(DetailPanel).border_title = _("Detail")
         self.query_one(EntryPanel).border_title = _("Entry")
@@ -376,6 +406,12 @@ class HamrlogApp(App[None]):
         )
         return station.summary(antenna)
 
+    def _apply_config(self) -> None:
+        """Put the settings that take effect at once (F9) to use."""
+        config = appconfig.load()
+        self.query_one(HistoryPanel).set_day_separator(config.day_separator)
+        self.query_one(StatsFooter).timezone = config.timezone
+
     def _refresh_stats(self) -> None:
         self.query_one(StatsFooter).stats = QsoService.stats()
 
@@ -452,6 +488,13 @@ class HamrlogApp(App[None]):
         Input on screen, including the boxes of the form dialog.
         """
         if (
+            isinstance(event.input, EntryField)
+            and self._view in LIST_VIEWS
+            and not self._kind.browses
+        ):
+            self._filter(event.value)
+            return
+        if (
             not isinstance(event.input, EntryField)
             or self._editing_id is not None
             or self._view != "log"
@@ -523,6 +566,8 @@ class HamrlogApp(App[None]):
         values = panel.values()
 
         if self._view in LIST_VIEWS and not entry_parser.is_command(panel.first_value):
+            if self._editing_id is None and not self._kind.can_add:
+                return
             if self._editing_id is not None:
                 self._save_item(self._editing_id, values)
             elif any(values.values()):
@@ -872,7 +917,9 @@ class HamrlogApp(App[None]):
         row = history.selected_row()
         if row is None or event.action in ("activate", "default"):
             return
-        if event.action == "delete":
+        if event.action == "view":
+            self._show_card(row.id)
+        elif event.action == "delete":
             self._confirm_delete(row.id)
         elif event.action == "edit":
             if len(history.marked) > 1:
@@ -884,6 +931,13 @@ class HamrlogApp(App[None]):
         elif event.action == "mark":
             history.toggle_mark(row.id)
             self._report_marks()
+
+    def _show_card(self, qso_id: int) -> None:
+        """V: everything about the QSO, in a card over the log."""
+        card = QsoService.card(qso_id)
+        if card is None:
+            return
+        self.push_screen(QsoCardScreen(card))
 
     def action_mark_all(self) -> None:
         """Ctrl+A: select every QSO of the log, or none if all were."""
@@ -1356,13 +1410,28 @@ class HamrlogApp(App[None]):
         brand = self._brands.get(kind.key, "")
         if brand:
             items = [item for item in items if item.brand.lower() == brand.lower()]
-        total = kind.total(query) if kind.searchable else len(items)
+        total = kind.total(query) if kind.searchable or not kind.browses else len(items)
         self.query_one(InventoryView).set_tabs(
             profile_legend()
             if isinstance(kind, ProfileKind)
-            else tab_bar(self._kinds, self._tab, brand, query, len(items), total)
+            else tab_bar(
+                self._kinds,
+                self._tab,
+                brand,
+                query,
+                len(items),
+                total,
+                show_tabs=self._view in TABBED_VIEWS,
+            )
         )
         self.query_one(ItemTable).show(kind, items, keep_id)
+
+    def _filter(self, text: str) -> None:
+        """Narrow a read-only list as its box is typed in."""
+        if entry_parser.is_command(text):
+            return
+        self._queries[self._kind.key] = text.strip()
+        self._reload_items()
 
     def _search(self, text: str) -> None:
         """``/search TEXT``: narrow a searchable list; alone, show all of it."""
@@ -1395,6 +1464,9 @@ class HamrlogApp(App[None]):
                 self._showing_selection = False
             return
         detail.show_lines(event.item.detail, locked=event.item.locked)
+        if not self._kind.browses:
+            # A read-only list: the box keeps the keyboard to filter it.
+            return
         panel.set_browsing(True)
         if self._showing_selection:
             panel.feedback("")
@@ -1406,6 +1478,12 @@ class HamrlogApp(App[None]):
         if item is None:
             return
         profiles = self._view == "profiles"
+        if self._view == "settings":
+            if action in ("activate", "edit"):
+                action = "edit"
+            elif action == "delete":
+                panel.feedback(_("Settings are changed, not deleted."), "warning")
+                return
         if action == "activate":
             if profiles:
                 self._activate_profile(item.id)
@@ -1424,6 +1502,14 @@ class HamrlogApp(App[None]):
         if action == "repeat":
             panel.feedback(
                 _("Nothing to repeat here: {keys}").format(keys=_(self._browse_prompt)),
+                "warning",
+            )
+            return
+        if action == "view":
+            panel.feedback(
+                _("V opens the card of a QSO, in the log: {keys}").format(
+                    keys=_(self._browse_prompt)
+                ),
                 "warning",
             )
             return
@@ -1503,7 +1589,12 @@ class HamrlogApp(App[None]):
                 # The QSOs logged from now on take the new values.
                 ProfileService.apply_to_state(item_id, self.state)
             self._reload_items(keep_id=item_id)
-            panel.feedback(_("✓ «{name}» updated").format(name=name), "ok")
+            message = _("✓ «{name}» updated").format(name=name)
+            if self._view == "settings":
+                self._apply_config()
+                if item_id in (DATABASE_SETTING, LANGUAGE_SETTING):
+                    message = f"{message} · {_(RESTART_NOTE)}"
+            panel.feedback(message, "ok")
         else:
             panel.clear()
             self._reload_items()
