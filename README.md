@@ -12,18 +12,14 @@ configuras la banda, la frecuencia, el modo y el equipo una sola vez, y a
 partir de ahí solo escribes el indicativo y pulsas Enter. Todo ocurre en una
 única pantalla: no hay menús ni ventanas que abrir.
 
-```
- OP EA7WM · BANDA 40m · QRG 7.130.000 · MODO SSB · EQUIPO IC-7300 / Dipolo G5RV · PERFIL HF-Casa
- FECHA HORA           INDICATIVO    NOMBRE      BANDA   FRECUENCIA   MODO     E/R       PAÍS        NOTAS
- 2026-09-20 18:42:10  EA4ABC        Juan        40m     7.130.000    SSB      59/57     España      Madrid
- 2026-09-20 18:45:02  DL2JKL        Hans        40m     7.130.000    SSB      59/59     Alemania
- 2026-09-20 18:51:33  F5GHI         Pierre      40m     7.130.000    SSB      57/55     Francia     Toulouse
- ▸ <Insertar nuevo>
-────────────────────────────────────────────────────────────────────────────────────────────────────────────
- IND  ea7wm        NOMBRE  Victor        ENV  59   REC  57   QTH  Sevilla      NOTAS
-   Tab campo siguiente · Mayús+Tab anterior · Enter registra · ↑↓ histórico
-  2026-09-20 18:52:41 UTC   QSO 128   hoy 17   únicos 96   países 23   40m:71       Ctrl+Q Salir
-```
+![La pantalla principal de hamrlog: el registro con los QSO separados por días, el detalle de lo que heredará el próximo QSO y la línea de entrada](docs/img/registro.webp)
+
+Hay vídeos cortos de cómo se registra un QSO, se da de alta un contacto, se
+monta un equipo o se crea un perfil en
+[ea7klx.es/hamrlog](https://ea7klx.es/hamrlog/), y el manual de usuario
+completo en [hamrlog.ea7klx.es](https://hamrlog.ea7klx.es/). Todas las
+capturas son de la demo (`hamrlog --demo`): indicativos, nombres y QSO
+inventados.
 
 ## Instalación
 
@@ -118,6 +114,8 @@ En la demo **no se guarda nada**. Puedes registrar, editar, borrar o cambiar
 la configuración; al salir se descarta, y la siguiente demo empieza siempre
 con los mismos datos. La línea de estado lo recuerda con `DEMO`.
 
+![Animación de la demo: se registran dos QSO, se recorre el registro con las flechas, se edita un QSO con E y se cambia la frecuencia con /frec](docs/img/registro.gif)
+
 Los datos están en el repositorio (`hamrlog/data/demo/demo.json`). Con ellos
 el instalador prepara una base de datos plantilla en la carpeta de datos
 (`demo/hamrlog-demo.sqlite3`), y cada demo trabaja sobre una copia temporal.
@@ -150,12 +148,15 @@ La línea de abajo tiene **dos estados**, según dónde esté el cursor:
 
 | Tecla | Efecto |
 |---|---|
+| `V` | **Ver** la ficha completa del QSO: contacto, agenda, QSO, tu estación y el equipo |
 | `D` | Borra ese QSO, con confirmación |
 | `E` | **Editar**: lo corrige ahí mismo, en la línea de entrada |
 | `Espacio` | Marca o desmarca el QSO (sale `S` en la columna INFO) |
 | `Ctrl+A` | Marca todos, o los desmarca si ya lo estaban |
 | `R` | **Repetir**: lo devuelve a la línea, editable, para registrarlo otra vez |
 | `↓` o `Esc` | Vuelve a `<Insertar nuevo>` |
+
+![La ficha de un QSO en FT8: datos del contacto, de la agenda, del QSO, de mi estación y del equipo con su emisora, antena y fuente](docs/img/ficha-qso.webp)
 
 Editar no abre ninguna ventana: la línea de entrada se rellena con ese QSO y
 añade una segunda fila con frecuencia, modo y **equipo**. Cambias lo que haga
@@ -273,6 +274,8 @@ Lo que hereda cada QSO se cambia con comandos.
 funciona igual que el registro: la lista arriba, la línea de entrada abajo
 para escribir, `↑` `↓` para recorrerla y `<Nuevo …>` al final.
 
+![El Inventario en la pestaña Equipos: cuatro equipos con sus emisoras, antenas y fuentes](docs/img/inventario.webp)
+
 | Pestaña | Qué se da de alta | Casillas |
 |---|---|---|
 | **Equipos** | Un conjunto: al menos una emisora, con sus antenas y fuentes | nombre, emisoras, antenas, fuentes, notas |
@@ -312,7 +315,11 @@ equipo. Para añadir un catálogo basta con dejar otro `.json` en esa carpeta,
 con la forma `{"tipo": "emisoras" | "antenas" | "fuentes" | "repetidores",
 "elementos": [...]}`.
 
+![La pestaña Emisoras con el catálogo: marca, modelo, potencia, bandas y notas de cada emisora](docs/img/emisoras.webp)
+
 ### Agenda (`F3`)
+
+![La agenda: indicativo, nombre, ID DMR, ciudad, provincia, país, locator y QSO de cada ficha](docs/img/agenda.webp)
 
 `F3` muestra la agenda en el recuadro del registro, igual que el Inventario:
 la lista arriba, `<Nuevo contacto>` al final, `D` y `E` sobre una ficha, y la
@@ -340,6 +347,8 @@ Un **perfil** es lo que hereda cada QSO mientras está activo: operador, equipo
 repetidor y datos del modo digital. Con un perfil activo basta con escribir el
 indicativo en el registro y pulsar Enter: el QSO se guarda con todo eso, y con
 la emisora y la antena del equipo que cubran su frecuencia.
+
+![Los perfiles: cinco perfiles con su tecla, frecuencia, modo, equipo, operador, repetidor, potencia y datos digitales](docs/img/perfiles.webp)
 
 `F4` muestra la lista en el recuadro del registro, igual que el Inventario y
 la Agenda, con `<Nuevo perfil>` al final y dos filas de casillas:
@@ -371,6 +380,8 @@ cambios a los QSO que vengan. `/perfil nombre` o `/perfil 3` también lo
 activan, útil en terminales que no distinguen `Ctrl+` cifra.
 
 ### Repetidores (`F5`)
+
+![Los repetidores de la lista de la URE: número, indicativo, salida, entrada, tono, modo, canal, locator y titular](docs/img/repetidores.webp)
 
 `F5` lista los repetidores en el recuadro del registro, como la Agenda: se
 buscan con `/buscar` y la cabecera dice cuántos hay. Cada uno lleva su número
@@ -411,6 +422,8 @@ Utilidades de consulta, una por pestaña; de momento, el **código Q**. La
 lista es de solo lectura: lo que escribes en la casilla FILTRO la acota al
 momento (`qsy`, `potencia`, `frecuencia`), y `↑` `↓` la recorren sin salir
 de la casilla. El detalle muestra el código como afirmación y como pregunta.
+
+![Las herramientas: el código Q con cada código, su significado y su pregunta](docs/img/herramientas.webp)
 
 ### Configuración (`F9`)
 
