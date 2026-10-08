@@ -10,14 +10,6 @@ msgstr "Comandos: /banda /frec /modo /perfil /repetidor /directo /deshacer /sali
 msgid "Inventory: /brand NAME filters the list · /brand alone clears the filter"
 msgstr "Inventario: /marca NOMBRE filtra la lista · /marca sola quita el filtro"
 
-#: src/hamrlog/tui/app.py:76
-msgid "Enter add · ↑↓ list · Ctrl+N tab · Alt+↑↓ brand · F1 log"
-msgstr "Enter alta · ↑↓ lista · Ctrl+N pestaña · Alt+↑↓ marca · F1 registro"
-
-#: src/hamrlog/tui/app.py:79
-msgid "Editing · Tab next field · Enter saves · Esc cancels"
-msgstr "Editando · Tab campo siguiente · Enter guarda · Esc cancela"
-
 #: src/hamrlog/tui/app.py:82
 msgid "D delete · E edit · ↓ back to typing"
 msgstr "D suprimir · E editar · ↓ volver a escribir"
@@ -490,10 +482,6 @@ msgstr "Antenas: {antennas} · Fuentes: {supplies}"
 msgid "Bands: {bands}"
 msgstr "Bandas: {bands}"
 
-#: src/hamrlog/tui/screens/base.py:190
-msgid "Tab next field · Enter or Ctrl+S save · Esc cancel"
-msgstr "Tab campo siguiente · Enter o Ctrl+S guardar · Esc cancelar"
-
 #: src/hamrlog/tui/screens/base.py:112 src/hamrlog/tui/screens/base.py:115 src/hamrlog/tui/screens/base.py:119 src/hamrlog/tui/screens/base.py:121
 msgid "No"
 msgstr "No"
@@ -561,10 +549,6 @@ msgstr "vía {call}"
 #: src/hamrlog/tui/widgets/entry.py:36
 msgid "D delete · E edit · R repeat · Space mark · Ctrl+A all · ↓ back to typing"
 msgstr "D suprimir · E editar · R repetir · Espacio marca · Ctrl+A todos · ↓ volver a escribir"
-
-#: src/hamrlog/tui/widgets/entry.py:43
-msgid "Editing · Enter saves · Esc cancels · the date and time do not change"
-msgstr "Editando · Enter guarda · Esc cancela · la fecha y la hora no cambian"
 
 #: src/hamrlog/tui/widgets/entry.py:76
 msgid "FIELD"
@@ -641,34 +625,6 @@ msgstr "Bajar"
 #: src/hamrlog/tui/widgets/entry.py:127
 msgid "Delete"
 msgstr "Suprimir"
-
-#: src/hamrlog/tui/widgets/entry.py:467
-msgid " next field  ·  "
-msgstr " campo siguiente  ·  "
-
-#: src/hamrlog/tui/widgets/entry.py:468
-msgid "Shift+Tab"
-msgstr "Mayús+Tab"
-
-#: src/hamrlog/tui/widgets/entry.py:469
-msgid " previous  ·  "
-msgstr " anterior  ·  "
-
-#: src/hamrlog/tui/widgets/entry.py:471
-msgid " logs  ·  "
-msgstr " registra  ·  "
-
-#: src/hamrlog/tui/widgets/entry.py:473
-msgid " history  ·  "
-msgstr " histórico  ·  "
-
-#: src/hamrlog/tui/widgets/entry.py:474
-msgid "/help"
-msgstr "/ayuda"
-
-#: src/hamrlog/tui/widgets/entry.py:475
-msgid " commands"
-msgstr " comandos"
 
 #: src/hamrlog/tui/widgets/footer.py:16
 msgid "F1 Log · F2 Inventory · Ctrl+Q Quit"
@@ -825,9 +781,6 @@ msgstr "{count} QSO en el registro"
 msgid "Address book: /search TEXT looks up callsign, name, city, province, country or DMR ID · /search alone shows everything"
 msgstr "Agenda: /buscar TEXTO busca en indicativo, nombre, ciudad, provincia, país o ID DMR · /buscar solo lo muestra todo"
 
-msgid "Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log"
-msgstr "Enter alta · ↑↓ lista · RePág/AvPág página · /buscar TEXTO · F1 registro"
-
 msgid "/search is for the address book (F3) and the repeaters (F5)."
 msgstr "/buscar es para la agenda (F3) y los repetidores (F5)."
 
@@ -855,8 +808,8 @@ msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidor
 msgid "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters"
 msgstr "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores"
 
-msgid "F1 · F2 · F3 · F4 · F5"
-msgstr "F1 · F2 · F3 · F4 · F5"
+msgid "F1 Log F2 Inv F3 Book F4 Prof F5 Rptr"
+msgstr "F1 Reg F2 Inv F3 Agenda F4 Perf F5 Rep"
 
 msgid "PROFILE"
 msgstr "PERFIL"
@@ -869,9 +822,6 @@ msgstr "Perfiles"
 
 msgid "Profiles: Enter on one activates it · * makes it the default, activated on start · Ctrl+0…9 activate the main ones from anywhere · /profile NAME or KEY"
 msgstr "Perfiles: Enter activa el elegido · * lo hace predeterminado, se activa al arrancar · Ctrl+0…9 activan los principales · /perfil NOMBRE o TECLA"
-
-msgid "Enter add · ↑↓ list · Ctrl+0…9 activate · F1 log"
-msgstr "Enter añade · ↑↓ lista · Ctrl+0…9 activan · F1 registro"
 
 msgid "Enter activate · * default · E edit · D delete · ↓ back to typing"
 msgstr "Enter activar · * predeterminado · E editar · D borrar · ↓ volver a escribir"
@@ -1017,3 +967,9 @@ msgstr "tono {tone} Hz"
 
 msgid "{name} is from the URE list: it is neither changed nor deleted. Enter tunes it."
 msgstr "{name} es de la lista de la URE: no se modifica ni se borra. Enter lo sintoniza."
+
+msgid "Detail"
+msgstr "Detalle"
+
+msgid "Entry"
+msgstr "Entrada"

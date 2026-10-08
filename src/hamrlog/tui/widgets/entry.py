@@ -44,9 +44,6 @@ BROWSE_PROMPT = N_("D delete · E edit · R repeat · Space mark · Ctrl+A all �
 #: The band is not among them: the application works it out from the frequency.
 EDIT_EXTRA_FIELDS: tuple[str, ...] = ("freq_hz", "mode", "equipment")
 
-#: Help line while a logged QSO is being edited.
-EDIT_KEYS = N_("Editing · Enter saves · Esc cancels · the date and time do not change")
-
 #: Short label and box width per field. Width None means "take what is left",
 #: so the free-text field grows with the terminal.
 FIELD_LAYOUT: dict[str, tuple[str, int | None]] = {
@@ -143,7 +140,11 @@ class EntryField(Input):
 
 
 class BrowseBar(Static, can_focus=True):
-    """Action bar shown in place of the form while browsing a logged QSO."""
+    """Action bar on the last row of the main window while browsing a row.
+
+    It belongs to the main window, but the EntryPanel drives it: browsing
+    is one of the entry's states, and the bar holds the keyboard meanwhile.
+    """
 
     BINDINGS = [
         Binding("up", "move_history(-1)", N_("Up"), show=False),
@@ -199,7 +200,7 @@ class BrowseBar(Static, can_focus=True):
 
 
 class EntryPanel(Vertical):
-    """The form, the action bar and the two lines of guidance below them."""
+    """The form; while browsing it stays in view, dimmed, holding the draft."""
 
     class Submitted(Message):
         """Enter was pressed: log what the form holds."""
@@ -210,10 +211,8 @@ class EntryPanel(Vertical):
         self._extra_fields: tuple[str, ...] = EDIT_EXTRA_FIELDS
         #: Boxes of a second row that is always part of the form.
         self._second_fields: tuple[str, ...] = ()
-        #: Help line replacing the log's when another view owns the line.
-        self._base_keys = ""
-        #: Help line while editing; each view sets its own.
-        self.edit_keys = EDIT_KEYS
+        #: Plain text of the message on the frame, empty when there is none.
+        self.message = ""
         #: Values put aside while browsing, so it never costs a half-typed QSO.
         self._draft: dict[str, str] = {}
         self._browsing = False
@@ -221,8 +220,6 @@ class EntryPanel(Vertical):
         self._editing = False
         #: True while one edit applies to several marked QSOs.
         self._bulk = False
-        #: Keys of the dialog open in the main panel, shown on the help line.
-        self._menu_keys = ""
         #: Pending rebuild of the field boxes, awaited by ``ready()`` so the
         #: caller can focus them without racing the layout.
         self._pending_mount: asyncio.Task[None] | None = None
@@ -231,14 +228,16 @@ class EntryPanel(Vertical):
         yield Horizontal(id="entry-fields")
         yield Horizontal(id="entry-second")
         yield Horizontal(id="entry-extra")
-        yield BrowseBar(id="entry-browse")
-        yield Static("", id="entry-hint")
-        yield Static("", id="entry-feedback")
 
     def on_mount(self) -> None:
-        self.query_one("#entry-browse", BrowseBar).display = False
+        self._bar.display = False
         self.query_one("#entry-extra", Horizontal).display = False
         self.query_one("#entry-second", Horizontal).display = False
+
+    @property
+    def _bar(self) -> BrowseBar:
+        """The action bar, which lives in the main window."""
+        return self.screen.query_one("#entry-browse", BrowseBar)
 
     # -------------------------------------------------------------- fields --
     @property
@@ -409,23 +408,25 @@ class EntryPanel(Vertical):
             self._leave_edit()
         self._browsing = browsing
 
-        form = self.query_one("#entry-fields", Horizontal)
-        bar = self.query_one("#entry-browse", BrowseBar)
+        bar = self._bar
 
         if browsing:
             self._draft = self.values()
-            form.display = False
-            self._show_second(False)
+            self._dim_form(True)
             bar.display = True
             bar.focus()
         else:
             bar.display = False
-            form.display = True
-            self._show_second(True)
+            self._dim_form(False)
             for box in self.fields:
                 box.value = self._draft.get(box.field_name, "")
             self._draft = {}
             self.focus_first()
+
+    def _dim_form(self, dimmed: bool) -> None:
+        """Keep the form in view but out of reach while the bar acts."""
+        for box in self.query(EntryField):
+            box.disabled = dimmed
 
     # ------------------------------------------------------------- editing --
     def start_edit(self, values: dict[str, str], *, bulk: bool = False) -> None:
@@ -438,7 +439,7 @@ class EntryPanel(Vertical):
         """
         self._editing = True
         self._bulk = bulk
-        self.query_one("#entry-browse", BrowseBar).display = False
+        self._bar.display = False
         main = self.query_one("#entry-fields", Horizontal)
         extra = self.query_one("#entry-extra", Horizontal)
         extra.display = bool(extra.children)
@@ -450,7 +451,6 @@ class EntryPanel(Vertical):
             box.disabled = bulk and box.field_name not in BULK_FIELDS
         for box in self.fields:
             box.value = values.get(box.field_name, "")
-        self.show_keys(None)
         self.focus_first()
 
     def stop_edit(self) -> None:
@@ -458,9 +458,10 @@ class EntryPanel(Vertical):
         if not self._editing:
             return
         self._leave_edit()
-        self.query_one("#entry-fields", Horizontal).display = False
-        self._show_second(False)
-        bar = self.query_one("#entry-browse", BrowseBar)
+        for box in self.fields:
+            box.value = self._draft.get(box.field_name, "")
+        self._dim_form(True)
+        bar = self._bar
         bar.display = True
         bar.focus()
 
@@ -470,9 +471,10 @@ class EntryPanel(Vertical):
         for box in self.query(EntryField):
             box.disabled = False
         self.query_one("#entry-extra", Horizontal).display = False
+        self.query_one("#entry-fields", Horizontal).display = True
+        self._show_second(True)
         for box in self.query(EntryField):
             box.value = ""
-        self.show_keys(None)
 
     def reset(self) -> None:
         """Back to an empty form, out of browsing and editing, draft dropped."""
@@ -480,10 +482,11 @@ class EntryPanel(Vertical):
             self._leave_edit()
         self._browsing = False
         self._draft = {}
-        self.query_one("#entry-browse", BrowseBar).display = False
+        self._bar.display = False
         self.query_one("#entry-fields", Horizontal).display = True
         self._show_second(True)
         for box in self.query(EntryField):
+            box.disabled = False
             box.value = ""
 
     def _show_second(self, visible: bool) -> None:
@@ -499,75 +502,36 @@ class EntryPanel(Vertical):
         return self.values()
 
     def set_browse_prompt(self, prompt: str) -> None:
-        self.query_one("#entry-browse", BrowseBar).set_prompt(prompt)
-
-    def set_base_keys(self, keys: str) -> None:
-        """Help line of the view in use; empty restores the log's."""
-        self._base_keys = keys
-        self.show_keys(None)
+        self._bar.set_prompt(prompt)
 
     def focus_input(self) -> None:
         """Return the keyboard to wherever input belongs right now."""
         if self._browsing and not self._editing:
-            self.query_one("#entry-browse", BrowseBar).focus()
+            self._bar.focus()
         else:
             self.focus_first()
 
-    # -------------------------------------------------------------- hints --
-    def set_hint(self, field_order: tuple[str, ...]) -> None:
-        """Rebuild the form for this field order and refresh the help line."""
-        self.build_fields(field_order)
-        if not self._menu_keys:
-            self.query_one("#entry-hint", Static).update(self._entry_keys())
-
-    def show_keys(self, keys: str | None) -> None:
-        """Put a dialog's keys on the help line, or the entry's back with None.
-
-        While a dialog fills the main panel the entry cannot be typed in, so
-        its line says what the dialog's keys do instead.
-        """
-        if not keys and self._editing:
-            keys = self.edit_keys
-        if not keys and self._base_keys:
-            keys = self._base_keys
-        self._menu_keys = keys or ""
-        hint = self.query_one("#entry-hint", Static)
-        if keys:
-            hint.update(Text(f"  {_(keys)}", style="dim italic"))
-        else:
-            hint.update(self._entry_keys())
-
-    @staticmethod
-    def _entry_keys() -> Text:
-        return Text.assemble(
-                ("  Tab", "dim"),
-                (_(" next field  ·  "), "dim italic"),
-                (_("Shift+Tab"), "dim"),
-                (_(" previous  ·  "), "dim italic"),
-                ("Enter", "dim"),
-                (_(" logs  ·  "), "dim italic"),
-                ("↑↓", "dim"),
-                (_(" history  ·  "), "dim italic"),
-                (_("/help"), "dim"),
-                (_(" commands"), "dim italic"),
-            )
-
     def feedback(self, message: str, level: str = "info") -> None:
-        """Show a transient message under the form.
+        """Show a transient message on the bottom edge of the entry window.
+
+        It sits on the frame rather than on a row of its own, so nothing
+        moves when a message comes or goes.
 
         Args:
-            message: Text to show; empty clears the line.
+            message: Text to show; empty clears it.
             level: One of "info", "ok", "warning", "error", "dup".
         """
         styles = {
-            "info": "dim",
+            "info": "italic",
             "ok": "bold green",
             "warning": "bold yellow",
             "error": "bold red",
             "dup": "bold black on yellow",
         }
-        widget = self.query_one("#entry-feedback", Static)
-        widget.update(Text(f"  {message}" if message else "", style=styles.get(level, "dim")))
+        self.message = message
+        self.border_subtitle = (
+            Text(f" {message} ", style=styles.get(level, "italic")) if message else None
+        )
 
     @on(Input.Submitted)
     def _on_any_submitted(self, event: Input.Submitted) -> None:

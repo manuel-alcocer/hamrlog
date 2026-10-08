@@ -6,7 +6,7 @@ from hamrlog.core.services import QsoService
 from hamrlog.tui.app import HamrlogApp
 from hamrlog.tui.screens.base import ConfirmScreen, FormScreen
 from hamrlog.tui.widgets.detail import DetailPanel
-from hamrlog.tui.widgets.entry import EntryPanel
+from hamrlog.tui.widgets.entry import BrowseBar, EntryPanel
 from hamrlog.tui.widgets.history import HistoryPanel
 
 
@@ -77,7 +77,7 @@ async def test_duplicate_warning_appears_while_typing(operator):
         await type_line(pilot, app, "ea4abc,juan")
         app.query_one(EntryPanel).set_first_value("ea4abc")
         await pilot.pause()
-        feedback = str(app.query_one("#entry-feedback").render())
+        feedback = app.query_one("#entry").message
         assert "DUPLICADO" in feedback
 
 
@@ -100,7 +100,7 @@ async def test_unknown_command_reports_an_error(operator):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         await type_line(pilot, app, "/noexiste")
-        assert "desconocido" in str(app.query_one("#entry-feedback").render())
+        assert "desconocido" in app.query_one("#entry").message
 
 
 async def test_new_contacts_inherit_the_changed_configuration(operator):
@@ -234,7 +234,7 @@ async def test_deleting_with_an_empty_log_is_harmless(operator):
         await pilot.press("ctrl+d")
         await pilot.pause()
         assert not isinstance(app.screen, ConfirmScreen)
-        assert "borrar" in str(app.query_one("#entry-feedback").render())
+        assert "borrar" in app.query_one("#entry").message
 
 
 async def test_main_history_shows_date_and_time(operator):
@@ -307,7 +307,7 @@ async def test_repeater_command_takes_a_callsign(operator):
         assert app.state.digital_data["talkgroup"] == "214"
 
         await type_line(pilot, app, "/repetidor NOEXISTE")
-        assert "No hay ningún repetidor" in str(app.query_one("#entry-feedback").render())
+        assert "No hay ningún repetidor" in app.query_one("#entry").message
 
 
 async def test_changing_band_leaves_the_repeater_in_the_interface(operator):
@@ -335,7 +335,7 @@ async def test_typing_a_known_callsign_shows_who_it_is(operator):
     async with app.run_test(size=(120, 30)) as pilot:
         app.query_one(EntryPanel).set_first_value("ea7wm")
         await pilot.pause()
-        feedback = str(app.query_one("#entry-feedback").render())
+        feedback = app.query_one("#entry").message
         assert "Manuel" in feedback
         assert "Sevilla" in feedback
         assert "2147001" in feedback
@@ -359,7 +359,7 @@ async def test_malformed_callsign_is_refused_in_the_interface(operator):
     async with app.run_test(size=(120, 30)) as pilot:
         await type_line(pilot, app, "qwerty,juan")
         assert QsoService.stats().total == 0
-        assert "número" in str(app.query_one("#entry-feedback").render())
+        assert "número" in app.query_one("#entry").message
 
         # The override marker gets it in anyway.
         await type_line(pilot, app, "bv100!,chen")
@@ -372,7 +372,7 @@ async def test_bad_callsign_is_flagged_while_typing(operator):
     async with app.run_test(size=(120, 30)) as pilot:
         app.query_one(EntryPanel).set_first_value("ea77")
         await pilot.pause()
-        assert "indicativo" in str(app.query_one("#entry-feedback").render()).lower()
+        assert "indicativo" in app.query_one("#entry").message.lower()
 
 
 async def test_commands_never_open_a_screen(operator):
@@ -391,7 +391,7 @@ async def test_commands_never_open_a_screen(operator):
         ):
             await type_line(pilot, app, command)
             assert len(app.screen_stack) == 1, command
-            assert expected in str(app.query_one("#entry-feedback").render()), command
+            assert expected in app.query_one("#entry").message, command
 
 
 async def test_no_shortcut_opens_a_menu(operator, station):
@@ -423,6 +423,12 @@ async def test_footer_shows_how_to_quit(operator):
         assert "F1 Registro · F2 Inventario · F3 Agenda · F4 Perfiles · F5 Repetidores" in str(
             app.query_one(StatsFooter).render()
         )
+    # Narrower still: every key keeps a short name of where it leads.
+    app = HamrlogApp()
+    async with app.run_test(size=(110, 30)) as pilot:
+        await pilot.pause()
+        footer = str(app.query_one(StatsFooter).render())
+        assert "F1 Reg F2 Inv F3 Agenda F4 Perf F5 Rep" in footer
 
 
 async def test_history_ends_with_the_insert_row(operator):
@@ -457,9 +463,8 @@ async def test_arrows_browse_the_history_without_moving_focus(operator):
         await pilot.pause()
         assert not history.on_insert_row
         assert history.selected_row().call == "EA3CCC"
-        # The keyboard stays inside the entry panel: it swaps the form for the
-        # action bar, but never hands the focus to the history table.
-        assert app.focused in app.query_one(EntryPanel).walk_children()
+        # The keyboard goes to the action bar, never to the history table.
+        assert isinstance(app.focused, BrowseBar)
         assert not isinstance(app.focused, HistoryPanel)
 
         await pilot.press("up")
@@ -559,7 +564,6 @@ async def test_history_direction_is_configurable(operator):
 
 
 async def test_entry_form_becomes_an_action_bar_over_a_qso(operator):
-    from hamrlog.tui.widgets.entry import BrowseBar
 
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
@@ -574,13 +578,22 @@ async def test_entry_form_becomes_an_action_bar_over_a_qso(operator):
         await pilot.pause()
         assert panel.values()["call"] == "ea2"
 
-        # Over a QSO the form is replaced by the action bar.
+        # Over a QSO the action bar takes the last row of the main window;
+        # the form stays in view, dimmed, with the draft in it.
+        entry_height = panel.region.height
         await pilot.press("up")
         await pilot.pause()
         assert panel.browsing
-        assert not panel.query_one("#entry-fields").display
-        assert panel.query_one("#entry-browse", BrowseBar).display
+        bar = app.query_one("#entry-browse", BrowseBar)
+        assert bar.display
         assert isinstance(app.focused, BrowseBar)
+        frame = app.query_one("#log-frame")
+        assert bar in frame.walk_children()
+        assert bar.region.bottom == frame.region.bottom - 1
+        assert panel.query_one("#entry-fields").display
+        assert all(box.disabled for box in panel.fields)
+        assert panel.values()["call"] == "ea2"
+        assert panel.region.height == entry_height
 
         # The half-typed QSO comes back untouched.
         await pilot.press("down")
@@ -601,7 +614,7 @@ async def test_letters_do_not_type_while_browsing(operator):
         await pilot.press("x")
         await pilot.pause()
         assert panel.values()["call"] == ""
-        assert "D suprimir" in str(app.query_one("#entry-feedback").render())
+        assert "D suprimir" in app.query_one("#entry").message
 
 
 async def test_r_repeats_a_qso_into_the_entry_line(operator):
@@ -697,7 +710,6 @@ async def test_e_edits_the_browsed_qso_in_the_entry_line(operator):
         # The band is worked out by the application, so it has no box.
         assert "band" not in panel.values()
         assert not app.query("#entry-band")
-        assert "Editando" in str(app.query_one("#entry-hint").render())
 
         # The arrows stay put while the form holds this row.
         await pilot.press("down")
@@ -765,7 +777,7 @@ async def test_an_edit_refuses_what_it_cannot_read(operator):
         await pilot.press("enter")
         await pilot.pause()
         assert app.query_one(EntryPanel).editing
-        assert "Frecuencia no reconocida" in str(app.query_one("#entry-feedback").render())
+        assert "Frecuencia no reconocida" in app.query_one("#entry").message
         assert QsoService.recent()[0].freq_hz == 7_130_000
 
 
@@ -783,7 +795,7 @@ async def test_an_edited_frequency_outside_every_band_clears_the_band(operator):
         await pilot.pause()
         row = QsoService.recent()[0]
         assert (row.freq_hz, row.band) == (5_000_000, "")
-        assert "fuera de las bandas" in str(app.query_one("#entry-feedback").render())
+        assert "fuera de las bandas" in app.query_one("#entry").message
 
 
 async def test_a_name_heard_on_air_fills_a_nameless_book_entry(operator):
@@ -820,13 +832,13 @@ async def test_logging_says_when_the_station_is_new_to_the_book(operator):
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
         await type_line(pilot, app, "ea4abc,juan")
-        feedback = str(app.query_one("#entry-feedback").render())
+        feedback = app.query_one("#entry").message
         assert "nuevo en la agenda" in feedback
         assert ContactService.lookup("EA4ABC") is not None
 
         # Second time around it is already known, so no notice.
         await type_line(pilot, app, "ea4abc,juan")
-        assert "nuevo en la agenda" not in str(app.query_one("#entry-feedback").render())
+        assert "nuevo en la agenda" not in app.query_one("#entry").message
 
 
 async def test_tab_walks_the_entry_fields(operator):
@@ -905,7 +917,7 @@ async def test_a_comma_is_no_longer_a_separator(operator):
         await pilot.pause()
 
         assert QsoService.stats().total == 0
-        assert "no permitidos" in str(app.query_one("#entry-feedback").render())
+        assert "no permitidos" in app.query_one("#entry").message
 
         # A comma inside a free-text field is kept verbatim.
         panel.set_values({"call": "ea4abc", "comment": "primero, y luego otro"})
@@ -931,17 +943,30 @@ async def test_changing_the_field_order_rebuilds_the_boxes(operator):
         ]
 
 
-async def test_log_area_is_framed_with_a_title(operator):
+async def test_each_window_has_its_own_frame(operator):
+    """Top line, main window, detail window, entry window, status line."""
     from textual.containers import Vertical
 
     app = HamrlogApp()
     async with app.run_test(size=(126, 26)) as pilot:
         await pilot.pause()
         frame = app.query_one("#log-frame", Vertical)
+        detail = app.query_one(DetailPanel)
+        entry = app.query_one(EntryPanel)
         assert frame.border_title == "Registro"
-        # The history and the detail live inside it.
+        assert detail.border_title == "Detalle"
+        assert entry.border_title == "Entrada"
         assert app.query_one(HistoryPanel) in frame.walk_children()
-        assert app.query_one(DetailPanel) in frame.walk_children()
+        assert detail not in frame.walk_children()
+
+        order = [app.query_one("#statusline"), frame, detail, entry, app.query_one("#stats")]
+        tops = [widget.region.y for widget in order]
+        assert tops == sorted(tops)
+        for window in (frame, detail, entry):
+            assert window.styles.border_top[0] == "round", window.id
+            assert window.styles.border_bottom[0] == "round", window.id
+            assert window.styles.border_left[0] == "round", window.id
+            assert window.styles.border_right[0] == "round", window.id
 
 
 async def test_detail_shows_what_a_new_qso_would_inherit(operator, station):
@@ -1093,13 +1118,14 @@ async def test_dialogs_are_drawn_in_the_log_area(operator):
     """No floating boxes: a dialog covers exactly the log, the rest stays in view."""
     app = HamrlogApp()
     async with app.run_test(size=(100, 30)) as pilot:
-        frame = app.query_one("#log-frame").region
         await type_line(pilot, app, "ea1aaa")
 
         for command, screen_type in (("/deshacer", ConfirmScreen), ("/modo DMR", FormScreen)):
             await type_line(pilot, app, command)
             await pilot.pause()
             assert isinstance(app.screen, screen_type), command
+            await pilot.pause()
+            frame = app.query_one("#log-frame").region
             assert app.screen.query_one(".modal").region == frame, command
             await pilot.press("escape")
             await pilot.pause()
@@ -1115,19 +1141,72 @@ def test_the_application_runs_without_the_mouse(monkeypatch):
     assert calls == {"mouse": False}
 
 
-async def test_dialog_keys_replace_the_entry_help_line(operator):
-    """Dialogs carry no help text: their keys go on the line under the entry."""
+async def test_no_help_line_under_the_entry(operator):
+    """Neither the log, the other views, editing nor a dialog show key help."""
     app = HamrlogApp()
     async with app.run_test(size=(120, 30)) as pilot:
-        hint = app.query_one("#entry-hint")
-        entry_keys = str(hint.render())
-        await type_line(pilot, app, "ea1aaa")
+        await pilot.pause()
 
+        def screen_text() -> str:
+            return app.export_screenshot().replace("&#160;", " ")
+
+        assert not app.query("#entry-hint")
+        assert "Shift+Tab" not in screen_text()
+
+        await type_line(pilot, app, "ea1aaa")
         await type_line(pilot, app, "/deshacer")
         await pilot.pause()
-        assert "S sí" in str(hint.render())
-
+        assert len(app.screen_stack) == 2
+        assert "S sí" not in screen_text()
         await pilot.press("escape")
         await pilot.pause()
+
+        await pilot.press("up")
         await pilot.pause()
-        assert str(hint.render()) == entry_keys
+        await pilot.press("E")
+        await pilot.pause()
+        assert app.query_one(EntryPanel).editing
+        assert "Esc" not in screen_text()
+        await pilot.press("escape")
+        await pilot.pause()
+
+        await pilot.press("f2")
+        await pilot.pause()
+        assert "Alt+" not in screen_text()
+
+
+async def test_messages_go_on_the_entry_frame(operator):
+    """No row of its own: a message sits on the entry's bottom edge."""
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        entry = app.query_one(EntryPanel)
+        height = entry.region.height
+        assert not entry.border_subtitle
+
+        await type_line(pilot, app, "/ayuda")
+        await pilot.pause()
+        assert "/band" in entry.message
+        assert "/band" in str(entry.border_subtitle)
+        assert entry.region.height == height
+
+        entry.feedback("")
+        await pilot.pause()
+        assert entry.message == ""
+        assert not entry.border_subtitle
+
+
+async def test_open_panel_follows_the_main_window(operator):
+    """When the entry window grows, the main window and its panel shrink."""
+    app = HamrlogApp()
+    async with app.run_test(size=(100, 30)) as pilot:
+        await type_line(pilot, app, "ea1aaa")
+        await type_line(pilot, app, "/deshacer")
+        await pilot.pause()
+        assert isinstance(app.screen, ConfirmScreen)
+
+        app.query_one(EntryPanel).styles.height = 8
+        await pilot.pause()
+        await pilot.pause()
+        frame = app.query_one("#log-frame").region
+        assert app.screen.query_one(".modal").region == frame

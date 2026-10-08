@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import re
 
 from rich.text import Text
 from textual.reactive import reactive
@@ -17,11 +18,16 @@ HELP_HINT = N_(
     "F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters · Ctrl+Q Quit"
 )
 
-#: What is left of it when the terminal cannot hold the whole hint.
+#: What is left of it when the terminal cannot hold the whole hint. Every
+#: key keeps at least a short name of where it leads.
 SHORT_HINTS = (
     N_("F1 Log · F2 Inventory · F3 Address book · F4 Profiles · F5 Repeaters"),
-    N_("F1 · F2 · F3 · F4 · F5"),
+    N_("F1 Log F2 Inv F3 Book F4 Prof F5 Rptr"),
 )
+
+
+#: The keys in a hint, drawn brighter than the names they lead to.
+_KEY = re.compile(r"F\d+|Ctrl\+\w")
 
 
 class StatsFooter(Static):
@@ -67,10 +73,20 @@ class StatsFooter(Static):
             padding = width - text.cell_len - len(hint) - 1
             if width and padding >= 2:
                 text.append(" " * padding)
-                text.append(hint, style="dim")
+                _append_hint(text, hint)
                 text.append(" ")
                 break
         return text
 
     def on_resize(self) -> None:
         self.refresh()
+
+
+def _append_hint(text: Text, hint: str) -> None:
+    """Append the hint with its keys bold and the rest dim."""
+    position = 0
+    for match in _KEY.finditer(hint):
+        text.append(hint[position : match.start()], style="dim")
+        text.append(match.group(), style="bold")
+        position = match.end()
+    text.append(hint[position:], style="dim")

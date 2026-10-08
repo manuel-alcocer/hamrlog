@@ -47,7 +47,7 @@ def ure_list(tmp_path, monkeypatch):
 
 
 def feedback(app) -> str:
-    return str(app.query_one("#entry-feedback").render())
+    return app.query_one("#entry").message
 
 
 async def open_repeaters(pilot) -> None:

@@ -37,12 +37,11 @@ from .inventory import KINDS, Item, Kind, ListSuggester, tab_bar
 from .profiles import PROFILE_KINDS, ProfileKind
 from .profiles import legend as profile_legend
 from .repeaters import REPEATER_KINDS
-from .screens.base import ConfirmScreen, Field, FormScreen
+from .screens.base import ConfirmScreen, Field, FormScreen, MainFrame
 from .widgets.detail import DetailPanel
 from .widgets.entry import (
     BROWSE_PROMPT,
     EDIT_EXTRA_FIELDS,
-    EDIT_KEYS,
     BrowseBar,
     EntryField,
     EntryPanel,
@@ -76,47 +75,38 @@ COMMANDS: dict[str, str] = {
 #: command typed without its value explains itself. Translated where shown.
 COMMAND_SUMMARY = N_("Commands: /band /freq /mode /profile /repeater /direct /undo /quit")
 
-#: ``/help`` and the help lines of the profiles view.
+#: ``/help`` and the action bar of the profiles view.
 PROFILES_SUMMARY = N_(
     "Profiles: Enter on one activates it · * makes it the default, activated on start · "
     "Ctrl+0…9 activate the main ones from anywhere · /profile NAME or KEY"
 )
-PROFILES_KEYS = N_("Enter add · ↑↓ list · Ctrl+0…9 activate · F1 log")
 PROFILES_BROWSE = N_("Enter activate · * default · E edit · D delete · ↓ back to typing")
 
 #: ``/help`` in the inventory view.
 INVENTORY_SUMMARY = N_("Inventory: /brand NAME filters the list · /brand alone clears the filter")
 
-#: Help line of the inventory view.
-INVENTORY_KEYS = N_("Enter add · ↑↓ list · Ctrl+N tab · Alt+↑↓ brand · F1 log")
-
-#: Help line while editing an item of the inventory view.
-INVENTORY_EDIT_KEYS = N_("Editing · Tab next field · Enter saves · Esc cancels")
-
 #: Action bar over an item of the inventory view.
 INVENTORY_BROWSE = N_("D delete · E edit · ↓ back to typing")
 
-#: ``/help`` and the help line of the address book view.
+#: ``/help`` in the address book view.
 CONTACTS_SUMMARY = N_(
     "Address book: /search TEXT looks up callsign, name, city, province, country "
     "or DMR ID · /search alone shows everything"
 )
-CONTACTS_KEYS = N_("Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log")
 
-#: ``/help`` and the help lines of the repeaters view.
+#: ``/help`` and the action bar of the repeaters view.
 REPEATERS_SUMMARY = N_(
     "Repeaters: Enter on one tunes it · /search TEXT looks up callsign, URE number, "
     "channel, club, place, locator or mode · /search alone shows everything"
 )
-REPEATERS_KEYS = N_("Enter add · ↑↓ list · PgUp/PgDn page · /search TEXT · F1 log")
 REPEATERS_BROWSE = N_("Enter tune · E edit · D delete · ↓ back to typing")
 
-#: The lists each list view shows, its title, and its help lines.
-LIST_VIEWS: dict[str, tuple[tuple[Kind, ...], str, str, str]] = {
-    "inventory": (KINDS, N_("Inventory"), INVENTORY_KEYS, INVENTORY_SUMMARY),
-    "contacts": (CONTACT_KINDS, N_("Address book"), CONTACTS_KEYS, CONTACTS_SUMMARY),
-    "profiles": (PROFILE_KINDS, N_("Profiles"), PROFILES_KEYS, PROFILES_SUMMARY),
-    "repeaters": (REPEATER_KINDS, N_("Repeaters"), REPEATERS_KEYS, REPEATERS_SUMMARY),
+#: The lists each list view shows, its title, and its ``/help``.
+LIST_VIEWS: dict[str, tuple[tuple[Kind, ...], str, str]] = {
+    "inventory": (KINDS, N_("Inventory"), INVENTORY_SUMMARY),
+    "contacts": (CONTACT_KINDS, N_("Address book"), CONTACTS_SUMMARY),
+    "profiles": (PROFILE_KINDS, N_("Profiles"), PROFILES_SUMMARY),
+    "repeaters": (REPEATER_KINDS, N_("Repeaters"), REPEATERS_SUMMARY),
 }
 
 #: Action bar over an item, per list view; INVENTORY_BROWSE otherwise.
@@ -211,12 +201,13 @@ class HamrlogApp(App[None]):
     # ------------------------------------------------------------- layout --
     def compose(self) -> ComposeResult:
         yield StatusLine(id="statusline")
-        # The log and the detail of whatever is selected share one frame: they
-        # are two views of the same thing, the entry form is a separate job.
-        with Vertical(id="log-frame"):
+        # Three windows, each in its own frame, between the top line and the
+        # status line: the list, the detail of its selection, and the entry.
+        with MainFrame(id="log-frame"):
             yield HistoryPanel(id="history")
             yield InventoryView(id="inventory")
-            yield DetailPanel(id="detail")
+            yield BrowseBar(id="entry-browse")
+        yield DetailPanel(id="detail")
         yield EntryPanel(id="entry")
         yield StatsFooter(id="stats")
 
@@ -233,6 +224,8 @@ class HamrlogApp(App[None]):
         # Wait for the field boxes to exist before handing them the keyboard,
         # so nothing else can take it first.
         self.query_one("#log-frame", Vertical).border_title = _("Log")
+        self.query_one(DetailPanel).border_title = _("Detail")
+        self.query_one(EntryPanel).border_title = _("Entry")
         self.query_one(InventoryView).display = False
         self._refresh_detail(None)
         panel = self.query_one(EntryPanel)
@@ -342,7 +335,7 @@ class HamrlogApp(App[None]):
         )
         self.state.apply_frequency_format()
         if self._view == "log":
-            self.query_one(EntryPanel).set_hint(self.state.field_order)
+            self.query_one(EntryPanel).build_fields(self.state.field_order)
         history = self.query_one(HistoryPanel)
         history.set_order(self.state.history_order)
         history.refresh_headers()
@@ -627,7 +620,7 @@ class HamrlogApp(App[None]):
 
         if action == "help":
             panel.feedback(
-                _(LIST_VIEWS[self._view][3] if self._view in LIST_VIEWS else COMMAND_SUMMARY),
+                _(LIST_VIEWS[self._view][2] if self._view in LIST_VIEWS else COMMAND_SUMMARY),
                 "info",
             )
             return
@@ -1307,8 +1300,11 @@ class HamrlogApp(App[None]):
             if self._view == "log"
             else self.query_one(ItemTable)
         )
-        # The header takes one row of the table's height.
-        rows = max(1, table.size.height - 1)
+        # The header takes one row of the table's height. Paging lands on a
+        # row, where the action bar takes one more, so the page is measured
+        # with the bar in place and Page Up and Page Down stay symmetric.
+        bar = 0 if self.query_one("#entry-browse", BrowseBar).display else 1
+        rows = max(1, table.size.height - 1 - bar)
         table.move_selection(direction * rows)
 
     async def _show_view(self, view: str, tab: int | None = None) -> None:
@@ -1336,14 +1332,10 @@ class HamrlogApp(App[None]):
         if in_log:
             panel.build_fields(self.state.field_order)
             panel.set_browse_prompt(BROWSE_PROMPT)
-            panel.edit_keys = EDIT_KEYS
-            panel.set_base_keys("")
             self._refresh_detail(None)
         else:
             panel.build_fields(self._kind.fields, extra=(), second=self._kind.second_row)
             panel.set_browse_prompt(self._browse_prompt)
-            panel.edit_keys = INVENTORY_EDIT_KEYS
-            panel.set_base_keys(LIST_VIEWS[view][2])
             self._reload_items()
         await panel.ready()
         panel.set_suggesters({} if in_log else self._kind.suggesters())

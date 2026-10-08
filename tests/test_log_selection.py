@@ -29,7 +29,7 @@ def info(app, qso_id: int) -> str:
 
 
 def feedback(app) -> str:
-    return str(app.query_one("#entry-feedback").render())
+    return app.query_one("#entry").message
 
 
 async def test_space_marks_and_unmarks_the_browsed_qso(operator):
@@ -108,6 +108,9 @@ async def test_editing_several_qsos_offers_only_frequency_mode_and_setup(operato
             assert (row.rst_sent, row.rst_rcvd) == ("57", "58")
         assert "3 QSO modificados" in feedback(app)
         assert not panel.editing
+        # Only browsing dims the form now; back on the insert row it is whole.
+        panel.set_browsing(False)
+        await pilot.pause()
         assert not app.query_one("#entry-call").disabled
 
 

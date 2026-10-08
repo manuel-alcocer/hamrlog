@@ -183,7 +183,7 @@ async def submit(pilot, app, values: dict[str, str]) -> None:
 
 
 def feedback(app) -> str:
-    return str(app.query_one("#entry-feedback").render())
+    return app.query_one("#entry").message
 
 
 async def test_f2_turns_the_log_into_the_equipment_tabs(operator):
@@ -493,11 +493,13 @@ async def test_page_keys_page_through_the_list_of_each_view(operator):
         await pilot.pause()
         history = app.query_one(HistoryPanel)
         bottom = history.cursor_row
+        # The action bar takes a row of the list once a row is selected.
+        rows = history.size.height - 2
         await pilot.press("pageup")
         await pilot.pause()
         page = bottom - history.cursor_row
         assert page > 1
-        assert page == history.size.height - 1
+        assert page == rows
         await pilot.press("pagedown")
         await pilot.pause()
         assert history.cursor_row == bottom

@@ -21,7 +21,7 @@ async def open_book(pilot) -> None:
 
 
 def feedback(app) -> str:
-    return str(app.query_one("#entry-feedback").render())
+    return app.query_one("#entry").message
 
 
 def header(app) -> str:
@@ -143,7 +143,8 @@ async def test_e_edits_and_d_deletes_a_contact(operator):
         await pilot.pause()
         assert ContactService.lookup("EA7WM").city == "Sevilla"
         assert panel.browsing and not panel.editing
-        assert not app.query_one("#entry-second").display
+        # Back on the bar, the form stays in view but out of reach.
+        assert app.query_one("#entry-city").disabled
 
         await pilot.press("d")
         await pilot.pause()

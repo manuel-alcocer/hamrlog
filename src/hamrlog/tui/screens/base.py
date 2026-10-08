@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 from textual import on
 from textual.app import ComposeResult
@@ -27,13 +26,8 @@ class PanelScreen(ModalScreen[ScreenResultType]):
     log's position depends on the terminal and on the entry line's height,
     which a stylesheet cannot know.
 
-    Panels carry no help text: the line of ``modal-help`` class is hidden and
-    its keys are shown on the entry's help line instead, which is otherwise
-    idle while a panel holds the keyboard.
+    Panels carry no help text: the line of ``modal-help`` class is hidden.
     """
-
-    #: Keys shown on the entry's help line while this panel is on top.
-    _keys: str = ""
 
     def on_mount(self) -> None:
         # The title goes on the frame, as «Log» does on the log.
@@ -45,29 +39,8 @@ class PanelScreen(ModalScreen[ScreenResultType]):
             title.display = False
         helps = panel.query(".modal-help")
         if helps:
-            help_line = helps.first()
-            self._keys = self._keys or str(help_line.content)  # type: ignore[attr-defined]
-            help_line.display = False
-        self._publish_keys()
+            helps.first().display = False
         self.call_after_refresh(self._fit_to_panel)
-
-    def on_screen_resume(self) -> None:
-        self._publish_keys()
-
-    def set_keys(self, keys: str) -> None:
-        """Change the keys this panel offers, e.g. when its focus moves."""
-        self._keys = keys
-        self._publish_keys()
-
-    def _publish_keys(self) -> None:
-        if self.app.screen is self:
-            _show_keys(self.app, self._keys)
-
-    def dismiss(self, result: ScreenResultType | None = None):  # type: ignore[no-untyped-def]
-        awaitable = super().dismiss(result)
-        # Whatever is on top once this one is gone decides the help line.
-        self.app.call_later(_restore_keys, self.app)
-        return awaitable
 
     def on_resize(self) -> None:
         self.call_after_refresh(self._fit_to_panel)
@@ -86,17 +59,17 @@ class PanelScreen(ModalScreen[ScreenResultType]):
         panel.styles.max_height = None
 
 
-def _show_keys(app: Any, keys: str | None) -> None:
-    try:
-        entry = app.screen_stack[0].query_one("#entry")
-    except Exception:  # noqa: BLE001 - the main screen is being torn down
-        return
-    entry.show_keys(keys)
+class MainFrame(Vertical):
+    """The frame of the main window, which a PanelScreen covers.
 
+    Its height changes when the entry window grows or shrinks, e.g. while
+    editing, so a panel open at that moment is fitted again.
+    """
 
-def _restore_keys(app: Any) -> None:
-    top = app.screen
-    _show_keys(app, top._keys if isinstance(top, PanelScreen) else None)
+    def on_resize(self) -> None:
+        top = self.app.screen
+        if isinstance(top, PanelScreen):
+            self.call_after_refresh(top._fit_to_panel)  # noqa: SLF001
 
 
 class ConfirmScreen(PanelScreen[bool]):
@@ -186,8 +159,6 @@ class Field:
 
 class FormScreen(PanelScreen[dict[str, str] | None]):
     """Small vertical form; dismisses with a dict of values or None."""
-
-    _keys = N_("Tab next field · Enter or Ctrl+S save · Esc cancel")
 
     BINDINGS = [
         Binding("escape", "cancel", N_("Cancel")),

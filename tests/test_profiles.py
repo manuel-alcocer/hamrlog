@@ -47,7 +47,7 @@ def stored(qso_id: int) -> Qso:
 
 
 def feedback(app) -> str:
-    return str(app.query_one("#entry-feedback").render())
+    return app.query_one("#entry").message
 
 
 async def open_profiles(pilot) -> None:
