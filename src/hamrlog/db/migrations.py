@@ -22,8 +22,10 @@ from .models import (
     Base,
     Contact,
     Equipment,
+    Operator,
     Profile,
     Qso,
+    Repeater,
     Station,
     StationType,
     equipment_antenna_links,
@@ -124,6 +126,38 @@ def upgrade_data(engine: Engine, previous_version: int | None) -> None:
         _english_country_names(engine)
     if previous_version is not None and previous_version < 11:
         _let_repeaters_share_a_callsign(engine)
+    if previous_version is not None and previous_version < 12:
+        _normalise_callsigns_and_names(engine)
+
+
+#: The columns the models normalise on write, per model.
+_NORMALISED_COLUMNS = (
+    (Operator, ("callsign", "name", "qth")),
+    (Qso, ("call", "repeater_call", "name", "qth")),
+    (Contact, ("callsign", "first_name", "last_name", "city")),
+    (Repeater, ("callsign",)),
+)
+
+
+def _normalise_callsigns_and_names(engine: Engine) -> None:
+    """Apply to stored rows what the models now do on write.
+
+    Assigning each value back runs it through the model's validators; the
+    rows they leave unchanged are not written.
+    """
+    from sqlalchemy.orm import Session
+
+    changed = 0
+    with Session(engine) as session, session.begin():
+        for model, columns in _NORMALISED_COLUMNS:
+            for row in session.scalars(select(model)):
+                before = [getattr(row, column) for column in columns]
+                for column, value in zip(columns, before, strict=True):
+                    setattr(row, column, value)
+                if [getattr(row, column) for column in columns] != before:
+                    changed += 1
+    if changed:
+        logger.info("schema upgrade: normalised callsigns and names in %d rows", changed)
 
 
 def _let_repeaters_share_a_callsign(engine: Engine) -> None:

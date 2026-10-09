@@ -35,7 +35,20 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
 )
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, validates
+
+from ..core.callsign import normalize as normalize_call
+from ..core.names import title_case
+
+
+def _callsign(value: str | None) -> str | None:
+    """Callsigns are stored upper case, however they were typed."""
+    return normalize_call(value) if value else value
+
+
+def _capitalised(value: str | None) -> str | None:
+    """Names, surnames and QTHs are stored with each word capitalised."""
+    return title_case(value) if value else value
 
 
 def utcnow() -> dt.datetime:
@@ -70,6 +83,14 @@ class Operator(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
     qsos: Mapped[list[Qso]] = relationship(back_populates="operator")
+
+    @validates("callsign")
+    def _validate_callsign(self, _key: str, value: str | None) -> str | None:
+        return _callsign(value)
+
+    @validates("name", "qth")
+    def _validate_capitalised(self, _key: str, value: str | None) -> str | None:
+        return _capitalised(value)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Operator {self.callsign}>"
@@ -377,6 +398,15 @@ class Contact(Base):
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
     updated_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow, onupdate=utcnow)
 
+    @validates("callsign")
+    def _validate_callsign(self, _key: str, value: str | None) -> str | None:
+        return _callsign(value)
+
+    #: The city is the contact's QTH.
+    @validates("first_name", "last_name", "city")
+    def _validate_capitalised(self, _key: str, value: str | None) -> str | None:
+        return _capitalised(value)
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Contact {self.callsign} {self.dmr_id}>"
 
@@ -439,6 +469,10 @@ class Repeater(Base):
     #: From the URE list: shown and used, never changed or deleted.
     preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
+
+    @validates("callsign")
+    def _validate_callsign(self, _key: str, value: str | None) -> str | None:
+        return _callsign(value)
 
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Repeater {self.callsign} {self.output_hz}>"
@@ -565,6 +599,14 @@ class Qso(Base):
     repeater: Mapped[Repeater | None] = relationship()
     equipment: Mapped[Equipment | None] = relationship()
 
+    @validates("call", "repeater_call")
+    def _validate_callsign(self, _key: str, value: str | None) -> str | None:
+        return _callsign(value)
+
+    @validates("name", "qth")
+    def _validate_capitalised(self, _key: str, value: str | None) -> str | None:
+        return _capitalised(value)
+
     def __repr__(self) -> str:  # pragma: no cover - debugging aid
         return f"<Qso {self.call} {self.qso_utc:%Y-%m-%d %H:%M} {self.band} {self.mode}>"
 
@@ -613,4 +655,5 @@ class SchemaVersion(Base):
 #: 10 gives profiles a setup, a power and one of the ten Ctrl+digit keys.
 #: 11 lets repeaters share a callsign, gives them the URE number and channel,
 #:   and adds the read-only catalog of the URE repeater list.
-CURRENT_SCHEMA_VERSION = 11
+#: 12 stores callsigns upper case and names, surnames and QTHs capitalised.
+CURRENT_SCHEMA_VERSION = 12

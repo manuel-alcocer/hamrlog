@@ -2,6 +2,16 @@
 
 ## Sin publicar
 
+### Indicativos y nombres
+
+- Los indicativos se guardan siempre en mayúsculas y sin espacios, y los
+  nombres, apellidos y QTH con cada palabra en mayúscula inicial: `mAnuel
+  angel` queda `Manuel Angel`. Vale para los QSO, la agenda y los operadores,
+  se escriban en la línea de entrada o lleguen de una importación. Las
+  palabras con cifras (un locator, un número) se dejan como se escribieron.
+- Esquema 12: las bases de datos anteriores normalizan al arrancar lo que ya
+  tenían guardado.
+
 ### Instaladores
 
 - **Windows**: el instalador gráfico actualiza además de instalar. Detecta la

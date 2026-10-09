@@ -1,0 +1,100 @@
+"""Callsigns are stored upper case; names, surnames and QTHs capitalised."""
+
+from __future__ import annotations
+
+import sqlite3
+
+import pytest
+
+from hamrlog.core.names import title_case
+from hamrlog.core.services import ContactService, OperatorService, QsoService
+from hamrlog.core.state import SessionState
+
+
+@pytest.mark.parametrize(
+    ("typed", "stored"),
+    [
+        ("mAnuel angel", "Manuel Angel"),
+        ("MANUEL", "Manuel"),
+        ("  josé   maría ", "José María"),
+        ("ñoño", "Ñoño"),
+        ("jean-pierre", "Jean-Pierre"),
+        ("o'brien", "O'Brien"),
+        ("alcalá de henares", "Alcalá De Henares"),
+        # A word with digits is a locator or a number: left as typed.
+        ("madrid IN80dk", "Madrid IN80dk"),
+        ("", ""),
+    ],
+)
+def test_title_case(typed, stored):
+    assert title_case(typed) == stored
+
+
+def test_a_logged_qso_stores_the_call_upper_and_the_name_and_qth_capitalised(state):
+    row = QsoService.log(
+        {"call": "ea1abc", "name": "mAnuel angel", "qth": "SAN fernando"}, state
+    )
+
+    assert (row.call, row.name, row.qth) == ("EA1ABC", "Manuel Angel", "San Fernando")
+
+
+def test_editing_a_qso_normalises_too(state):
+    row = QsoService.log({"call": "EA1ABC"}, state)
+
+    edited = QsoService.update(row.id, {"call": "ea1xyz"})
+
+    assert edited.call == "EA1XYZ"
+
+
+def test_an_address_book_entry_is_normalised(tmp_path):
+    entry = ContactService.create(
+        "ea7klx", first_name="mAnuel angel", last_name="alcocer JIMÉNEZ", city="sevilla"
+    )
+
+    assert (entry.callsign, entry.first_name, entry.last_name, entry.city) == (
+        "EA7KLX", "Manuel Angel", "Alcocer Jiménez", "Sevilla"
+    )
+
+    edited = ContactService.update(entry.id, first_name="pepe", city="dos hermanas")
+    assert (edited.first_name, edited.city) == ("Pepe", "Dos Hermanas")
+
+
+def test_an_operator_is_normalised():
+    operator = OperatorService.create("ea7wm", "manuel", "IM76", "sevilla")
+
+    assert (operator.callsign, operator.name, operator.qth) == ("EA7WM", "Manuel", "Sevilla")
+
+
+def test_upgrading_a_v11_database_normalises_what_it_holds(tmp_path):
+    """Rows written before schema 12 get the same treatment on start."""
+    from hamrlog.db import session as db_session
+
+    path = tmp_path / "old.sqlite3"
+    url = f"sqlite:///{path.as_posix()}"
+    db_session.dispose()
+    db_session.init_engine(url)
+    operator = OperatorService.create("EA7WM", "Manuel")
+    contact = ContactService.create("EA7KLX", first_name="Manuel")
+    qso = QsoService.log({"call": "EA1ABC"}, SessionState(operator_id=operator.id))
+    db_session.dispose()
+
+    # What an older version could have stored.
+    with sqlite3.connect(path) as connection:
+        connection.execute("UPDATE operators SET name = 'mAnuel', qth = 'SEVILLA'")
+        connection.execute(
+            "UPDATE contacts SET callsign = 'ea7klx', first_name = 'mAnuel angel', "
+            "last_name = 'alcocer', city = 'sevilla'"
+        )
+        connection.execute("UPDATE qsos SET call = 'ea1abc', name = 'pepe', qth = 'cádiz'")
+        connection.execute("UPDATE schema_version SET version = 11")
+
+    db_session.init_engine(url)
+
+    stored = OperatorService.get(operator.id)
+    assert (stored.name, stored.qth) == ("Manuel", "Sevilla")
+    entry = ContactService.get(contact.id)
+    assert (entry.callsign, entry.first_name, entry.last_name, entry.city) == (
+        "EA7KLX", "Manuel Angel", "Alcocer", "Sevilla"
+    )
+    row = QsoService.get(qso.id)
+    assert (row.call, row.name, row.qth) == ("EA1ABC", "Pepe", "Cádiz")
