@@ -47,3 +47,50 @@ def test_the_windows_bundle_carries_translations_and_catalog():
     spec = (PROJECT_ROOT / "packaging" / "pyinstaller" / "hamrlog.spec").read_text()
     assert '"hamrlog/locales"' in spec
     assert '"hamrlog/data/preseed"' in spec
+
+
+# Inno Setup's own messages, defined by its language files.
+INNO_BUILTIN_MESSAGES = {"CreateDesktopIcon", "LaunchProgram", "UninstallProgram"}
+
+
+def test_every_installer_message_exists_in_both_languages():
+    """A message missing in one language shows up as an empty label."""
+    script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    used = set(re.findall(r"\{cm:(\w+)", script))
+    used |= set(re.findall(r"CustomMessage\('(\w+)'\)", script))
+    used -= INNO_BUILTIN_MESSAGES
+    for language in ("english", "spanish"):
+        defined = set(re.findall(rf"^{language}\.(\w+)=", script, re.MULTILINE))
+        assert used <= defined, f"{language} lacks {sorted(used - defined)}"
+
+
+def test_the_windows_installer_is_utf8_with_a_bom():
+    """Without the BOM Inno Setup may read the accents as ANSI."""
+    raw = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_bytes()
+    assert raw.startswith(b"\xef\xbb\xbf")
+
+
+def test_the_upgrade_check_and_the_release_tests_use_the_app_id():
+    """Upgrades find the installed copy through AppId, and the installer's
+    own code and the release workflow look it up by the same GUID."""
+    script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
+    app_id = re.search(r"^AppId=\{\{([0-9A-F-]+)\}$", script, re.MULTILINE)
+    assert app_id is not None
+    assert f"Uninstall\\{{{app_id.group(1)}}}_is1'" in script
+    assert f"{{{app_id.group(1)}}}_is1" in workflow
+
+
+def test_the_release_ships_what_the_linux_installer_downloads():
+    """install.sh --upgrade looks for this tarball name in SHA256SUMS.txt."""
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
+    installer = (PROJECT_ROOT / "packaging" / "linux" / "install.sh").read_text()
+    assert 'PLATFORM="linux-x86_64"' in installer
+    assert 'bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"' in workflow
+    assert 'tar -czf "artifacts/$bundle.tar.gz"' in workflow
+    assert "artifacts/hamrlog-install.sh" in workflow
+    assert "releases/latest/download/hamrlog-install.sh" in installer

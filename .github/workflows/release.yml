@@ -98,14 +98,117 @@ jobs:
             echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           fi
 
+      # A fixed release rather than whatever the runner image carries, so the
+      # script always meets the compiler it was tested with.
+      - name: Instalar Inno Setup
+        shell: pwsh
+        run: |
+          $url = 'https://github.com/jrsoftware/issrc/releases/download/is-6_7_3/innosetup-6.7.3.exe'
+          Invoke-WebRequest $url -OutFile "$env:RUNNER_TEMP\innosetup.exe"
+          Start-Process "$env:RUNNER_TEMP\innosetup.exe" -Wait -ArgumentList `
+            '/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER', "/DIR=$env:RUNNER_TEMP\inno"
+          "$env:RUNNER_TEMP\inno" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
       - name: Compilar el instalador
+        shell: pwsh
         run: |
           iscc /DHamrlogVersion=${{ steps.version.outputs.value }} packaging\windows\hamrlog.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          # An older version, only to test the upgrade and the downgrade guard.
+          iscc /DHamrlogVersion=0.0.1 "/O$env:RUNNER_TEMP\old" packaging\windows\hamrlog.iss
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+
+      - name: Probar instalación, actualización y desinstalación
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = '${{ steps.version.outputs.value }}'
+          $new = "dist\hamrlog-$version-setup.exe"
+          $old = "$env:RUNNER_TEMP\old\hamrlog-0.0.1-setup.exe"
+          $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{9B2F1A54-6C3D-4E7A-9F81-3C5D2B7E4A16}_is1'
+          $app = "$env:LOCALAPPDATA\Programs\hamrlog"
+
+          function Setup($file, [string[]] $more = @()) {
+            $arguments = @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/CURRENTUSER') + $more
+            (Start-Process $file -ArgumentList $arguments -Wait -PassThru).ExitCode
+          }
+          function Installed { (Get-ItemProperty $key -ErrorAction SilentlyContinue).DisplayVersion }
+          function UserPath { (Get-ItemProperty HKCU:\Environment).Path }
+
+          if ((Setup $old @('/TASKS=addtopath')) -ne 0) { throw 'Installing 0.0.1 failed' }
+          if ((Installed) -ne '0.0.1') { throw "Expected 0.0.1, found $(Installed)" }
+
+          if ((Setup $new) -ne 0) { throw "Upgrading to $version failed" }
+          if ((Installed) -ne $version) { throw "Expected $version, found $(Installed)" }
+          & "$app\hamrlog.exe" --version
+          if ($LASTEXITCODE -ne 0) { throw 'The installed hamrlog does not start' }
+          if ((UserPath) -notlike "*$app*") { throw 'hamrlog is not in PATH' }
+
+          if ((Setup $old) -eq 0) { throw 'A silent downgrade was not refused' }
+          if ((Installed) -ne $version) { throw 'The refused downgrade changed the install' }
+
+          if ((Setup $new) -ne 0) { throw 'Reinstalling the same version failed' }
+
+          Start-Process "$app\unins000.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES' -Wait
+          # The uninstaller hands over to a copy of itself in TEMP: wait for it.
+          for ($i = 0; $i -lt 60 -and (Test-Path $key); $i++) { Start-Sleep 1 }
+          if (Test-Path $key) { throw 'Still registered after uninstalling' }
+          if (Test-Path "$app\hamrlog.exe") { throw 'hamrlog.exe left behind' }
+          if ((UserPath) -like "*$app*") { throw 'hamrlog left in PATH' }
 
       - uses: actions/upload-artifact@v7
         with:
           name: hamrlog-windows-setup
           path: dist/hamrlog-*-setup.exe
+
+  linux-installer:
+    name: Instalador de Linux
+    needs: binaries
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: hamrlog-linux-x86_64
+          path: incoming
+
+      - name: Deducir la versión
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+          fi
+
+      # install.sh installs the executable it finds next to itself; the
+      # name is what install.sh --upgrade looks for in SHA256SUMS.txt.
+      - name: Empaquetar el ejecutable con el instalador
+        run: |
+          bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"
+          mkdir -p "$bundle" artifacts
+          install -m 755 incoming/hamrlog-linux-x86_64 "$bundle/hamrlog"
+          install -m 755 packaging/linux/install.sh "$bundle/install.sh"
+          cp LICENSE README.md "$bundle/"
+          tar -czf "artifacts/$bundle.tar.gz" "$bundle"
+          cp packaging/linux/install.sh artifacts/hamrlog-install.sh
+
+      - name: Probar instalación y desinstalación
+        run: |
+          bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"
+          prefix="$RUNNER_TEMP/prefix"
+          tar -xzf "artifacts/$bundle.tar.gz" -C "$RUNNER_TEMP"
+          "$RUNNER_TEMP/$bundle/install.sh" --prefix "$prefix"
+          "$prefix/bin/hamrlog" --version
+          "$RUNNER_TEMP/$bundle/install.sh" --prefix "$prefix" --status
+          "$RUNNER_TEMP/$bundle/install.sh" --prefix "$prefix" --uninstall
+          test ! -e "$prefix/bin/hamrlog"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: hamrlog-linux-installer
+          path: artifacts/*
 
   python-package:
     name: Paquete de Python
@@ -121,7 +224,7 @@ jobs:
 
   publish:
     name: Publicar la release
-    needs: [binaries, windows-installer, python-package]
+    needs: [binaries, windows-installer, linux-installer, python-package]
     runs-on: ubuntu-latest
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
@@ -146,19 +249,24 @@ jobs:
             ## Instalación
 
             **Windows**: descarga `hamrlog-*-setup.exe` y ejecútalo. No hace
-            falta tener Python. Si prefieres el ejecutable suelto, usa
-            `hamrlog-windows-x86_64.exe`.
+            falta tener Python. Para actualizar, ejecuta el instalador de la
+            versión nueva: conserva la carpeta, las opciones y tu diario. Se
+            desinstala desde «Agregar o quitar programas». Si prefieres el
+            ejecutable suelto, usa `hamrlog-windows-x86_64.exe`.
 
-            **Linux**: descarga `hamrlog-linux-x86_64`, dale permisos y
-            ejecútalo:
+            **Linux**: instala, o actualiza a la última versión, con
 
             ```bash
-            chmod +x hamrlog-linux-x86_64
-            ./hamrlog-linux-x86_64
+            curl -fsSL https://github.com/manuel-alcocer/hamrlog/releases/latest/download/hamrlog-install.sh | bash
             ```
 
+            o descarga `hamrlog-*-linux-x86_64.tar.gz`, descomprímelo y
+            ejecuta `./install.sh`. Después: `install.sh --upgrade` para
+            actualizar y `install.sh --uninstall` para quitarlo. El ejecutable
+            suelto es `hamrlog-linux-x86_64`.
+
             **Con Python ya instalado**: `pipx install hamrlog` desde el
-            `.whl`, o el `install.sh` del repositorio.
+            `.whl`, o el `install.sh` de la raíz del repositorio.
 
             **Arch Linux**: `packaging/arch/PKGBUILD`.
 

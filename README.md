@@ -29,7 +29,16 @@ Descarga **`hamrlog-X.Y.Z-setup.exe`** de la [última
 versión](https://github.com/manuel-alcocer/hamrlog/releases/latest) y
 ejecútalo. No hace falta tener Python: el programa va dentro. El instalador
 añade `hamrlog` al menú Inicio y, si lo marcas, al PATH para poder llamarlo
-desde cualquier consola.
+desde cualquier consola. Instala para tu usuario, sin pedir permisos de
+administrador.
+
+- **Actualizar**: ejecuta el instalador de la versión nueva. Cierra hamrlog si
+  está abierto, conserva la carpeta, las opciones y el diario, e indica de qué
+  versión a cuál actualiza. Si ya tienes la misma versión ofrece repararla; si
+  la instalada es más nueva, pregunta antes de volver atrás.
+- **Desinstalar**: desde «Agregar o quitar programas» o el menú Inicio. Quita
+  `hamrlog` del PATH y pregunta si borrar también el diario y la
+  configuración (`%APPDATA%\hamrlog`); por defecto los conserva.
 
 Si prefieres no instalar nada, descarga `hamrlog-windows-x86_64.exe` y
 ejecútalo tal cual.
@@ -41,7 +50,29 @@ consola antigua.
 
 ### Linux
 
-**Ejecutable suelto**, sin necesidad de Python:
+**Instalador**, sin necesidad de Python. Instala la última versión en
+`~/.local/bin` con su entrada en el menú de aplicaciones:
+
+```bash
+curl -fsSL https://github.com/manuel-alcocer/hamrlog/releases/latest/download/hamrlog-install.sh | bash
+```
+
+O descarga `hamrlog-X.Y.Z-linux-x86_64.tar.gz`, descomprímelo y ejecuta
+`./install.sh` dentro. Después, con el mismo script:
+
+```bash
+install.sh --upgrade      # descarga la última versión y comprueba su SHA-256
+install.sh --uninstall    # quita el programa; el diario se queda
+install.sh --purge        # quita el programa y borra el diario y la configuración
+install.sh --status       # versión instalada
+```
+
+`--system` instala para todos los usuarios en `/usr/local` (con `sudo`) y
+`--version X.Y.Z` elige una versión concreta; `--help` lo explica todo. No
+vuelve a una versión anterior ni pisa un `hamrlog` instalado por otro medio
+sin `--force`.
+
+**Ejecutable suelto**, sin instalar nada:
 
 ```bash
 curl -LO https://github.com/manuel-alcocer/hamrlog/releases/latest/download/hamrlog-linux-x86_64
@@ -49,8 +80,8 @@ chmod +x hamrlog-linux-x86_64
 ./hamrlog-linux-x86_64
 ```
 
-**Con Python 3.10 o superior**, en un entorno aislado y con el comando en el
-PATH:
+**Con Python 3.10 o superior**, desde el código, en un entorno aislado y con
+el comando en el PATH:
 
 ```bash
 git clone https://github.com/manuel-alcocer/hamrlog
@@ -754,8 +785,9 @@ Los de cada versión están en [CHANGELOG.md](CHANGELOG.md).
 ## Publicar una versión
 
 Las releases se construyen solas: etiquetar y empujar compila el ejecutable de
-Linux, el de Windows y el instalador, comprueba que las pruebas pasan y que
-cada binario arranca, y lo publica todo con sus sumas SHA-256.
+Linux, el de Windows y los dos instaladores, comprueba que las pruebas pasan,
+que cada binario arranca y que los instaladores instalan, actualizan y
+desinstalan, y lo publica todo con sus sumas SHA-256.
 
 ```bash
 # El número vive en src/hamrlog/__init__.py; súbelo también en

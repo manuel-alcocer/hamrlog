@@ -2,6 +2,25 @@
 
 ## Sin publicar
 
+### Instaladores
+
+- **Windows**: el instalador gráfico actualiza además de instalar. Detecta la
+  versión instalada y lo dice en el título y en el resumen; con la misma
+  versión ofrece reparar y con una más nueva pregunta antes de volver atrás
+  (en modo silencioso no lo hace). Cierra hamrlog si está abierto, reconstruye
+  la demo y conserva carpeta y opciones.
+- **Windows**: al desinstalar se quita `hamrlog` del PATH (antes se quedaba),
+  se borra la plantilla de la demo y se pregunta si borrar el diario. Textos
+  del asistente en español e inglés.
+- **Linux**: instalador nuevo (`hamrlog-install.sh` y el tarball
+  `hamrlog-X.Y.Z-linux-x86_64.tar.gz`) que instala el ejecutable sin Python,
+  con entrada en el menú de aplicaciones, y admite `--upgrade`,
+  `--uninstall`, `--purge`, `--system` y `--version`. Comprueba las descargas
+  con SHA-256.
+- La release prueba en Windows la instalación, la actualización, el rechazo
+  del downgrade y la desinstalación, y en Linux la instalación y la
+  desinstalación.
+
 ### Teclas de función
 
 - `F1` … `F5` llevan a su sección desde cualquier otra, no solo desde el
