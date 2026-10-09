@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## v0.3.0
 
 ### Indicativos y nombres
 
