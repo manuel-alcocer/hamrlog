@@ -470,6 +470,8 @@ class Repeater(Base):
     preset: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[dt.datetime] = mapped_column(DateTime, default=utcnow)
 
+    # The QTH is left as written: it describes the site, often with its
+    # height ("Cuitu Negru 1850 m."), and the URE list already spells it.
     @validates("callsign")
     def _validate_callsign(self, _key: str, value: str | None) -> str | None:
         return _callsign(value)
@@ -656,4 +658,6 @@ class SchemaVersion(Base):
 #: 11 lets repeaters share a callsign, gives them the URE number and channel,
 #:   and adds the read-only catalog of the URE repeater list.
 #: 12 stores callsigns upper case and names, surnames and QTHs capitalised.
-CURRENT_SCHEMA_VERSION = 12
+#: 13 keeps particles lower case in them ("Alcalá de Henares"), so it runs the
+#:   normalisation of 12 again.
+CURRENT_SCHEMA_VERSION = 13

@@ -126,7 +126,7 @@ def upgrade_data(engine: Engine, previous_version: int | None) -> None:
         _english_country_names(engine)
     if previous_version is not None and previous_version < 11:
         _let_repeaters_share_a_callsign(engine)
-    if previous_version is not None and previous_version < 12:
+    if previous_version is not None and previous_version < 13:
         _normalise_callsigns_and_names(engine)
 
 

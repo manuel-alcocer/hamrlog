@@ -20,7 +20,15 @@ from hamrlog.core.state import SessionState
         ("ñoño", "Ñoño"),
         ("jean-pierre", "Jean-Pierre"),
         ("o'brien", "O'Brien"),
-        ("alcalá de henares", "Alcalá De Henares"),
+        # Particles stay lower case, except where the name or a part of the
+        # place starts.
+        ("alcalá de henares", "Alcalá de Henares"),
+        ("MARÍA DE LOS ÁNGELES", "María de los Ángeles"),
+        ("ortega y gasset", "Ortega y Gasset"),
+        ("de la fuente", "De la Fuente"),
+        ("sierra de béjar - la covatilla", "Sierra de Béjar - La Covatilla"),
+        ("sevilla, el viso", "Sevilla, El Viso"),
+        ("ludwig VAN beethoven", "Ludwig van Beethoven"),
         # A word with digits is a locator or a number: left as typed.
         ("madrid IN80dk", "Madrid IN80dk"),
         ("", ""),
@@ -65,8 +73,10 @@ def test_an_operator_is_normalised():
     assert (operator.callsign, operator.name, operator.qth) == ("EA7WM", "Manuel", "Sevilla")
 
 
-def test_upgrading_a_v11_database_normalises_what_it_holds(tmp_path):
-    """Rows written before schema 12 get the same treatment on start."""
+@pytest.mark.parametrize("old_version", [11, 12])
+def test_upgrading_an_older_database_normalises_what_it_holds(tmp_path, old_version):
+    """Rows written before schema 12, and the particles 12 capitalised, get
+    the current treatment on start."""
     from hamrlog.db import session as db_session
 
     path = tmp_path / "old.sqlite3"
@@ -80,21 +90,30 @@ def test_upgrading_a_v11_database_normalises_what_it_holds(tmp_path):
 
     # What an older version could have stored.
     with sqlite3.connect(path) as connection:
-        connection.execute("UPDATE operators SET name = 'mAnuel', qth = 'SEVILLA'")
+        connection.execute("UPDATE operators SET name = 'mAnuel', qth = 'Alcalá De Henares'")
         connection.execute(
             "UPDATE contacts SET callsign = 'ea7klx', first_name = 'mAnuel angel', "
             "last_name = 'alcocer', city = 'sevilla'"
         )
         connection.execute("UPDATE qsos SET call = 'ea1abc', name = 'pepe', qth = 'cádiz'")
-        connection.execute("UPDATE schema_version SET version = 11")
+        connection.execute("UPDATE schema_version SET version = ?", (old_version,))
 
     db_session.init_engine(url)
 
     stored = OperatorService.get(operator.id)
-    assert (stored.name, stored.qth) == ("Manuel", "Sevilla")
+    assert (stored.name, stored.qth) == ("Manuel", "Alcalá de Henares")
     entry = ContactService.get(contact.id)
     assert (entry.callsign, entry.first_name, entry.last_name, entry.city) == (
         "EA7KLX", "Manuel Angel", "Alcocer", "Sevilla"
     )
     row = QsoService.get(qso.id)
     assert (row.call, row.name, row.qth) == ("EA1ABC", "Pepe", "Cádiz")
+
+
+def test_a_repeater_gets_its_callsign_upper_and_keeps_its_qth():
+    from hamrlog.core.services import RepeaterService
+
+    repeater = RepeaterService.create("ed7zab", output_hz=145_600_000, qth="Cuitu Negru 1850 m.")
+
+    assert repeater.callsign == "ED7ZAB"
+    assert repeater.qth == "Cuitu Negru 1850 m."

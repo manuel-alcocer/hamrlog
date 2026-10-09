@@ -1,5 +1,14 @@
 # Cambios
 
+## Sin publicar
+
+- Las partículas de nombres y lugares (`de`, `del`, `la`, `los`, `y`…) se
+  quedan en minúscula salvo al principio: `María de los Ángeles`, `Alcalá de
+  Henares`, `Sierra de Béjar - La Covatilla`. Esquema 13: lo que la 0.3.0 ya
+  guardó como `Alcalá De Henares` se corrige al arrancar.
+- Los repetidores pasan su indicativo a mayúsculas, pero su QTH se deja como
+  está: describe el emplazamiento, a menudo con la altura (`1850 m.`).
+
 ## v0.3.0
 
 ### Indicativos y nombres
