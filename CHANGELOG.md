@@ -1,6 +1,6 @@
 # Cambios
 
-## Sin publicar
+## v0.3.1
 
 - Las partículas de nombres y lugares (`de`, `del`, `la`, `los`, `y`…) se
   quedan en minúscula salvo al principio: `María de los Ángeles`, `Alcalá de
