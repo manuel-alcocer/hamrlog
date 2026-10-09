@@ -2,8 +2,14 @@
 
 from __future__ import annotations
 
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 try:
     import tomllib
@@ -33,12 +39,13 @@ def test_the_arch_package_matches_the_version():
     assert found.group(1) == hamrlog.__version__
 
 
-def test_the_windows_installer_default_matches_the_version():
-    """CI passes the real version in, but the default should not go stale."""
-    script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text()
-    found = re.search(r'#define HamrlogVersion "(.+)"', script)
-    assert found is not None
-    assert found.group(1) == hamrlog.__version__
+def test_the_windows_installer_has_no_version_of_its_own():
+    """semantic-release cannot bump it, so CI must always pass it in."""
+    script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    assert re.search(r'#define HamrlogVersion "', script) is None
+    assert "#error" in script
 
 
 def test_the_windows_bundle_carries_translations_and_catalog():
@@ -90,7 +97,61 @@ def test_the_release_ships_what_the_linux_installer_downloads():
     workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
     installer = (PROJECT_ROOT / "packaging" / "linux" / "install.sh").read_text()
     assert 'PLATFORM="linux-x86_64"' in installer
-    assert 'bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"' in workflow
+    assert 'bundle="hamrlog-${{ needs.meta.outputs.version }}-linux-x86_64"' in workflow
     assert 'tar -czf "artifacts/$bundle.tar.gz"' in workflow
     assert "artifacts/hamrlog-install.sh" in workflow
     assert "releases/latest/download/hamrlog-install.sh" in installer
+
+
+def semantic_release_config() -> dict:
+    with (PROJECT_ROOT / "pyproject.toml").open("rb") as handle:
+        return tomllib.load(handle)["tool"]["semantic_release"]
+
+
+def test_semantic_release_bumps_every_version_number():
+    """The release commit has to move all of them, or the version tests above
+    fail on the next push."""
+    variables = semantic_release_config()["version_variables"]
+    assert "src/hamrlog/__init__.py:__version__" in variables
+    # nf: PKGBUILD writes the number unquoted.
+    assert "packaging/arch/PKGBUILD:pkgver:nf" in variables
+
+
+def test_semantic_release_tags_what_the_release_workflow_expects():
+    config = semantic_release_config()
+    assert config["tag_format"] == "v{version}"
+    assert config["branches"]["main"]["match"] == "main"
+
+
+@pytest.mark.skipif(sys.platform == "win32" or shutil.which("sed") is None,
+                    reason="semantic-release runs the build command on Linux")
+def test_the_release_dates_the_unreleased_changelog_section(tmp_path):
+    """build_command turns "Sin publicar" into the new version, and the
+    changed changelog goes into the release commit."""
+    config = semantic_release_config()
+    assert "CHANGELOG.md" in config["assets"]
+    changelog = tmp_path / "CHANGELOG.md"
+    changelog.write_text("# Cambios\n\n## Sin publicar\n\n- Algo nuevo.\n\n## v0.2.0\n")
+
+    subprocess.run(config["build_command"], shell=True, cwd=tmp_path, check=True,
+                   env={**os.environ, "NEW_VERSION": "0.3.0"})
+
+    assert changelog.read_text() == "# Cambios\n\n## v0.3.0\n\n- Algo nuevo.\n\n## v0.2.0\n"
+
+
+def test_the_changelog_keeps_the_heading_the_release_looks_for():
+    """New entries go under "## Sin publicar"; right after a release the top
+    section is the version just published."""
+    first = re.search(r"^## (.+)$", (PROJECT_ROOT / "CHANGELOG.md").read_text(), re.MULTILINE)
+    assert first is not None
+    assert first.group(1) == "Sin publicar" or re.fullmatch(r"v\d+\.\d+\.\d+", first.group(1))
+
+
+def test_ci_hands_the_new_tag_to_the_release_workflow():
+    """A tag pushed with GITHUB_TOKEN triggers nothing, so CI calls it."""
+    ci = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
+    release = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
+    assert "uses: ./.github/workflows/release.yml" in ci
+    assert "tag: ${{ needs.release.outputs.tag }}" in ci
+    assert "workflow_call:" in release
+    assert (PROJECT_ROOT / "packaging" / "release-notes.md").exists()

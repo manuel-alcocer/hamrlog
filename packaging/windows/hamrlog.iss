@@ -22,8 +22,10 @@
 #define AppURL "https://github.com/manuel-alcocer/hamrlog"
 #define AppExeName "hamrlog.exe"
 
+; No default: semantic-release bumps the version everywhere else, and a
+; number written here would fall behind.
 #ifndef HamrlogVersion
-  #define HamrlogVersion "0.2.0"
+  #error Pass the version: iscc /DHamrlogVersion=X.Y.Z hamrlog.iss
 #endif
 
 [Setup]

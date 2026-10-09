@@ -784,18 +784,13 @@ Los de cada versión están en [CHANGELOG.md](CHANGELOG.md).
 
 ## Publicar una versión
 
-Las releases se construyen solas: etiquetar y empujar compila el ejecutable de
-Linux, el de Windows y los dos instaladores, comprueba que las pruebas pasan,
-que cada binario arranca y que los instaladores instalan, actualizan y
-desinstalan, y lo publica todo con sus sumas SHA-256.
-
-```bash
-# El número vive en src/hamrlog/__init__.py; súbelo también en
-# packaging/arch/PKGBUILD y packaging/windows/hamrlog.iss (hay pruebas que
-# comprueban que no se queden atrás)
-git tag -a v0.3.0 -m "v0.3.0"
-git push origin v0.3.0
-```
+Las releases salen solas: en cada push a `main` que pase las pruebas,
+semantic-release lee los commits (`feat:` → versión menor, `fix:` → parche) y,
+si toca, sube el número, fecha la sección `## Sin publicar` del CHANGELOG,
+etiqueta y publica. La release compila el ejecutable de Linux, el de Windows y
+los dos instaladores, comprueba que las pruebas pasan, que cada binario arranca
+y que los instaladores instalan, actualizan y desinstalan, y lo sube todo con
+sus sumas SHA-256.
 
 Los detalles están en [packaging/README.md](packaging/README.md).
 

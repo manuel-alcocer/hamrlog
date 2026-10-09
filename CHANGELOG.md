@@ -21,6 +21,13 @@
   del downgrade y la desinstalación, y en Linux la instalación y la
   desinstalación.
 
+### Publicación
+
+- Las versiones se publican solas con semantic-release a partir de los
+  commits: tras cada push a `main` que pase las pruebas, si hay un `feat` o un
+  `fix` nuevo, se sube el número, esta sección pasa a llamarse como la
+  versión y se construye y publica la release, con este CHANGELOG como notas.
+
 ### Teclas de función
 
 - `F1` … `F5` llevan a su sección desde cualquier otra, no solo desde el

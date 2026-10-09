@@ -4,7 +4,7 @@ Cómo se construyen y publican las versiones de hamrlog.
 
 ## Qué produce cada versión
 
-Al empujar una etiqueta `v*`, el flujo `.github/workflows/release.yml` genera:
+Cada versión la publica `.github/workflows/release.yml`, que genera:
 
 | Fichero | Para |
 |---|---|
@@ -24,14 +24,45 @@ silencioso se rechaza y desinstala; en Linux instala y desinstala el tarball.
 
 ## Publicar
 
+Las versiones salen solas con
+[python-semantic-release](https://python-semantic-release.readthedocs.io/),
+a partir de los mensajes de commit ([Conventional
+Commits](https://www.conventionalcommits.org/es/)). En cada push a `main`, si
+pasan todas las pruebas, el job `release` de `ci.yml`:
+
+1. Mira los commits desde la última etiqueta. `feat` sube la versión menor,
+   `fix` y `perf` la de parche, y `feat!` o `BREAKING CHANGE:` la mayor
+   (mientras sea 0.x, la menor). `docs`, `chore`, `test`, `refactor`, `ci`…
+   no publican nada.
+2. Si toca versión, cambia el número en `src/hamrlog/__init__.py` y en
+   `packaging/arch/PKGBUILD`, renombra la sección `## Sin publicar` del
+   CHANGELOG a `## vX.Y.Z`, hace el commit `chore(release): vX.Y.Z`, etiqueta
+   `vX.Y.Z` y lo empuja.
+3. Llama a `release.yml` con esa etiqueta, que construye, prueba y publica la
+   release. Sus notas son la sección de esa versión del CHANGELOG más las
+   instrucciones de `packaging/release-notes.md`.
+
+El paso 3 es una llamada y no un disparo por etiqueta porque lo que se empuja
+con `GITHUB_TOKEN` no lanza otros flujos.
+
+Así que, para publicar:
+
+- Escribe los cambios en el CHANGELOG bajo `## Sin publicar`, a mano y en
+  español, como hasta ahora.
+- Usa el prefijo correcto en los commits.
+
+Comprobar qué versión saldría sin tocar nada:
+
 ```bash
-# 1. Subir la versión en los dos sitios donde aparece
-#    - pyproject.toml   -> version = "0.2.0"
-#    - packaging/arch/PKGBUILD -> pkgver=0.2.0
-# 2. Etiquetar y empujar
-git tag -a v0.2.0 -m "v0.2.0"
-git push origin v0.2.0
+uvx --from python-semantic-release==10.7.0 semantic-release version --print
 ```
+
+Si una release falla a medias, se repite desde *Actions → Release → Run
+workflow* con la etiqueta (`v0.3.0`). Empujar una etiqueta `v*` a mano también
+la publica.
+
+El `.iss` no lleva número propio: siempre se compila con
+`/DHamrlogVersion=X.Y.Z`.
 
 ## Construir a mano
 
@@ -59,7 +90,7 @@ Necesita Windows con [Inno Setup](https://jrsoftware.org/isinfo.php) 6.7 (la
 release instala la 6.7.3) y el `hamrlog.exe` ya construido en `dist\`:
 
 ```powershell
-iscc /DHamrlogVersion=0.2.0 packaging\windows\hamrlog.iss
+iscc /DHamrlogVersion=0.3.0 packaging\windows\hamrlog.iss
 ```
 
 Instala por usuario, así que no pide permisos de administrador; el asistente

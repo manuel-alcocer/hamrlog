@@ -1,28 +1,62 @@
 name: Release
 
-# Builds the self-contained executables and publishes them. Windows binaries
-# cannot be cross-compiled from Linux, which is why this runs on both.
+# Builds the self-contained executables and the installers of a tag and
+# publishes them as a GitHub release. Windows binaries cannot be
+# cross-compiled from Linux, which is why this runs on both.
 on:
-  push:
-    tags: ["v*"]
+  # From ci.yml, once semantic-release has tagged a new version.
+  workflow_call:
+    inputs:
+      tag:
+        description: "Etiqueta que publicar (por ejemplo v0.3.0)"
+        required: true
+        type: string
+  # By hand, to retry a release that failed halfway.
   workflow_dispatch:
     inputs:
-      version:
-        description: "Versión a construir (por ejemplo 0.1.0)"
+      tag:
+        description: "Etiqueta que publicar (por ejemplo v0.3.0)"
         required: true
+  # A tag pushed by hand. semantic-release pushes with GITHUB_TOKEN, which
+  # does not trigger this, so a release is never built twice.
+  push:
+    tags: ["v*"]
 
 permissions:
   contents: write
 
 jobs:
+  meta:
+    name: Versión
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.meta.outputs.tag }}
+      version: ${{ steps.meta.outputs.version }}
+    steps:
+      - name: Deducir la etiqueta y la versión
+        id: meta
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          tag="${INPUT_TAG:-$GITHUB_REF_NAME}"
+          case "$tag" in
+            v[0-9]*) ;;
+            *) echo "::error::No es una etiqueta de versión: $tag"; exit 1 ;;
+          esac
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
   binaries:
     name: Ejecutable para ${{ matrix.label }}
+    needs: meta
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          # Pinned: the binary needs the glibc it was built with or newer,
+          # so an older image runs on more distributions.
+          - os: ubuntu-24.04
             label: Linux
             artifact: hamrlog-linux-x86_64
             binary: dist/hamrlog
@@ -33,6 +67,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
 
       - uses: astral-sh/setup-uv@v10.2.0
         with:
@@ -52,8 +88,10 @@ jobs:
       - name: Comprobar que el ejecutable arranca
         shell: bash
         run: |
-          "${{ matrix.binary }}" --version
           "${{ matrix.binary }}" info
+          # The tag and the version inside the binary must agree (Windows
+          # ends the line with \r\n).
+          test "$("${{ matrix.binary }}" --version | tr -d '\r')" = "hamrlog ${{ needs.meta.outputs.version }}"
 
       - name: Renombrar para la release
         shell: bash
@@ -72,10 +110,12 @@ jobs:
 
   windows-installer:
     name: Instalador de Windows
-    needs: binaries
+    needs: [meta, binaries]
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -87,16 +127,6 @@ jobs:
         run: |
           mkdir -p dist
           cp incoming/hamrlog-windows-x86_64.exe dist/hamrlog.exe
-
-      - name: Deducir la versión
-        id: version
-        shell: bash
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
 
       # A fixed release rather than whatever the runner image carries, so the
       # script always meets the compiler it was tested with.
@@ -112,7 +142,7 @@ jobs:
       - name: Compilar el instalador
         shell: pwsh
         run: |
-          iscc /DHamrlogVersion=${{ steps.version.outputs.value }} packaging\windows\hamrlog.iss
+          iscc /DHamrlogVersion=${{ needs.meta.outputs.version }} packaging\windows\hamrlog.iss
           if ($LASTEXITCODE -ne 0) { exit 1 }
           # An older version, only to test the upgrade and the downgrade guard.
           iscc /DHamrlogVersion=0.0.1 "/O$env:RUNNER_TEMP\old" packaging\windows\hamrlog.iss
@@ -122,7 +152,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $version = '${{ steps.version.outputs.value }}'
+          $version = '${{ needs.meta.outputs.version }}'
           $new = "dist\hamrlog-$version-setup.exe"
           $old = "$env:RUNNER_TEMP\old\hamrlog-0.0.1-setup.exe"
           $key = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\{9B2F1A54-6C3D-4E7A-9F81-3C5D2B7E4A16}_is1'
@@ -163,30 +193,23 @@ jobs:
 
   linux-installer:
     name: Instalador de Linux
-    needs: binaries
+    needs: [meta, binaries]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
 
       - uses: actions/download-artifact@v8
         with:
           name: hamrlog-linux-x86_64
           path: incoming
 
-      - name: Deducir la versión
-        id: version
-        run: |
-          if [ -n "${{ github.event.inputs.version }}" ]; then
-            echo "value=${{ github.event.inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-          fi
-
       # install.sh installs the executable it finds next to itself; the
       # name is what install.sh --upgrade looks for in SHA256SUMS.txt.
       - name: Empaquetar el ejecutable con el instalador
         run: |
-          bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"
+          bundle="hamrlog-${{ needs.meta.outputs.version }}-linux-x86_64"
           mkdir -p "$bundle" artifacts
           install -m 755 incoming/hamrlog-linux-x86_64 "$bundle/hamrlog"
           install -m 755 packaging/linux/install.sh "$bundle/install.sh"
@@ -196,7 +219,7 @@ jobs:
 
       - name: Probar instalación y desinstalación
         run: |
-          bundle="hamrlog-${{ steps.version.outputs.value }}-linux-x86_64"
+          bundle="hamrlog-${{ needs.meta.outputs.version }}-linux-x86_64"
           prefix="$RUNNER_TEMP/prefix"
           tar -xzf "artifacts/$bundle.tar.gz" -C "$RUNNER_TEMP"
           "$RUNNER_TEMP/$bundle/install.sh" --prefix "$prefix"
@@ -212,9 +235,12 @@ jobs:
 
   python-package:
     name: Paquete de Python
+    needs: meta
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
       - uses: astral-sh/setup-uv@v10.2.0
       - run: uv build
       - uses: actions/upload-artifact@v7
@@ -224,11 +250,12 @@ jobs:
 
   publish:
     name: Publicar la release
-    needs: [binaries, windows-installer, linux-installer, python-package]
+    needs: [meta, binaries, windows-installer, linux-installer, python-package]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.meta.outputs.tag }}
 
       - uses: actions/download-artifact@v8
         with:
@@ -241,33 +268,19 @@ jobs:
           cd release && sha256sum * > SHA256SUMS.txt
           ls -lh
 
+      # The notes are the version's section of CHANGELOG.md, written by hand,
+      # followed by the installation instructions.
+      - name: Preparar las notas
+        env:
+          TAG: ${{ needs.meta.outputs.tag }}
+        run: |
+          awk -v head="## $TAG" '$0 == head {on = 1; next} on && /^## / {exit} on' \
+            CHANGELOG.md > notes.md
+          cat packaging/release-notes.md >> notes.md
+
       - uses: softprops/action-gh-release@v3
         with:
+          tag_name: ${{ needs.meta.outputs.tag }}
+          name: ${{ needs.meta.outputs.tag }}
           files: release/*
-          generate_release_notes: true
-          body: |
-            ## Instalación
-
-            **Windows**: descarga `hamrlog-*-setup.exe` y ejecútalo. No hace
-            falta tener Python. Para actualizar, ejecuta el instalador de la
-            versión nueva: conserva la carpeta, las opciones y tu diario. Se
-            desinstala desde «Agregar o quitar programas». Si prefieres el
-            ejecutable suelto, usa `hamrlog-windows-x86_64.exe`.
-
-            **Linux**: instala, o actualiza a la última versión, con
-
-            ```bash
-            curl -fsSL https://github.com/manuel-alcocer/hamrlog/releases/latest/download/hamrlog-install.sh | bash
-            ```
-
-            o descarga `hamrlog-*-linux-x86_64.tar.gz`, descomprímelo y
-            ejecuta `./install.sh`. Después: `install.sh --upgrade` para
-            actualizar y `install.sh --uninstall` para quitarlo. El ejecutable
-            suelto es `hamrlog-linux-x86_64`.
-
-            **Con Python ya instalado**: `pipx install hamrlog` desde el
-            `.whl`, o el `install.sh` de la raíz del repositorio.
-
-            **Arch Linux**: `packaging/arch/PKGBUILD`.
-
-            Comprueba las descargas con `SHA256SUMS.txt`.
+          body_path: notes.md

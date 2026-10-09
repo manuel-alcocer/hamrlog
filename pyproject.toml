@@ -75,3 +75,28 @@ testpaths = ["tests"]
 pythonpath = ["src"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
+
+# Releases are cut by CI (ci.yml, job "release") from conventional commits:
+# feat -> minor, fix/perf -> patch, "!" or BREAKING CHANGE -> major (minor
+# while on 0.x). It bumps the version, renames the "Sin publicar" section of
+# the changelog, tags vX.Y.Z and pushes; release.yml then builds and publishes.
+[tool.semantic_release]
+version_variables = [
+    "src/hamrlog/__init__.py:__version__",
+    "packaging/arch/PKGBUILD:pkgver:nf",
+]
+tag_format = "v{version}"
+commit_message = "chore(release): v{version}"
+commit_author = "github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>"
+allow_zero_version = true
+major_on_zero = false
+# The changelog is written by hand, in Spanish: the release only dates it.
+build_command = "sed -i \"s/^## Sin publicar$/## v$NEW_VERSION/\" CHANGELOG.md"
+assets = ["CHANGELOG.md"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.remote]
+type = "github"

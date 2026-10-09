@@ -71,3 +71,53 @@ jobs:
         with:
           name: python-package
           path: dist/*
+
+  # semantic-release reads the conventional commits since the last tag and,
+  # when one of them calls for it (feat, fix, perf, breaking change), bumps
+  # the version, commits it, tags vX.Y.Z and pushes. Nothing to release, no
+  # tag. Only for pushes to main, and only once every test has passed.
+  release:
+    name: Versión nueva
+    needs: [test, build-check]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
+
+      # Release exactly the commit that was tested, even if main moved on
+      # meanwhile (the push then fails and the next run releases).
+      - name: Volver al commit probado
+        run: git reset --hard ${{ github.sha }}
+
+      - uses: astral-sh/setup-uv@v10.2.0
+
+      - name: Calcular la versión, etiquetarla y empujarla
+        id: version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: >-
+          uvx --from python-semantic-release==10.7.0
+          semantic-release version --no-vcs-release --no-changelog
+
+  # A tag pushed with GITHUB_TOKEN triggers no workflow, so the build and the
+  # GitHub release are called from here.
+  publish:
+    name: Publicar
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    uses: ./.github/workflows/release.yml
+    with:
+      tag: ${{ needs.release.outputs.tag }}
+    permissions:
+      contents: write
