@@ -16,6 +16,10 @@
 ; Silent use, as the release workflow tests it:
 ;   hamrlog-X.Y.Z-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /TASKS=addtopath
 ;   unins000.exe /VERYSILENT /SUPPRESSMSGBOXES     (keeps the log)
+;
+; hamrlog upgrades itself by running the new setup with /SILENT /RELAUNCH
+; (see hamrlog/updater.py): a progress bar only, and hamrlog opens again at
+; the end.
 
 #define AppName "hamrlog"
 #define AppPublisher "Manuel Alcocer"
@@ -107,6 +111,8 @@ Filename: "{app}\{#AppExeName}"; Parameters: "build-demo"; StatusMsg: "{cm:Build
     Flags: runhidden runasoriginaluser
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppName}}"; \
     Flags: postinstall nowait skipifsilent
+; After an upgrade started from hamrlog itself, which closed to let it run.
+Filename: "{app}\{#AppExeName}"; Flags: nowait runasoriginaluser; Check: WantsRelaunch
 
 [UninstallDelete]
 ; The demo template is derived data; the log next to it is left to the user.
@@ -154,6 +160,17 @@ begin
   Result := 0;
   while (Result = 0) and ((A <> '') or (B <> '')) do
     Result := NextVersionPart(A) - NextVersionPart(B);
+end;
+
+{ /RELAUNCH: hamrlog started this setup and closed; open it again at the end. }
+function WantsRelaunch(): Boolean;
+var
+  I: Integer;
+begin
+  Result := False;
+  for I := 1 to ParamCount do
+    if CompareText(ParamStr(I), '/RELAUNCH') = 0 then
+      Result := True;
 end;
 
 function IsUpgrade(): Boolean;

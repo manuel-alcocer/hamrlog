@@ -1182,3 +1182,13 @@ msgstr "V ver · D suprimir · E editar · R repetir · Espacio marca · Ctrl+A 
 
 msgid "DEMO"
 msgstr "DEMO"
+
+# Settings: updates (settings.py).
+msgid "Updates"
+msgstr "Actualizaciones"
+
+msgid "On start, look for a newer version and offer to install it"
+msgstr "Al arrancar, busca una versión más nueva y ofrece instalarla"
+
+msgid "on or off; the HAMRLOG_NO_UPDATE_CHECK variable turns it off as well"
+msgstr "sí o no; la variable HAMRLOG_NO_UPDATE_CHECK también lo desactiva"

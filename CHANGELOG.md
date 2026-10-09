@@ -1,5 +1,18 @@
 # Cambios
 
+## Sin publicar
+
+### Actualizaciones
+
+- Al abrir hamrlog se comprueba si hay una versión nueva y se pregunta en la
+  terminal, antes de la interfaz, si descargarla e instalarla: sí, no u
+  omitir esa versión. En Linux se instala y se abre la nueva; en Windows se
+  lanza el instalador, hamrlog se cierra y el instalador lo vuelve a abrir.
+  Las descargas se comprueban con SHA-256.
+- Con pip, uv o el paquete de Arch solo se avisa. GitHub se consulta como
+  mucho una vez al día; `F9` → *Actualizaciones* o `HAMRLOG_NO_UPDATE_CHECK`
+  lo desactivan.
+
 ## v0.3.1
 
 - Las partículas de nombres y lugares (`de`, `del`, `la`, `los`, `y`…) se

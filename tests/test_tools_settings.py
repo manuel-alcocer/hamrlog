@@ -13,7 +13,7 @@ from hamrlog.db import session as db_session
 from hamrlog.tui.app import HamrlogApp
 from hamrlog.tui.profiles import ProfileKind
 from hamrlog.tui.screens.base import ConfirmScreen
-from hamrlog.tui.settings import DAY_SEPARATOR, LANGUAGE, TIMEZONE
+from hamrlog.tui.settings import DAY_SEPARATOR, LANGUAGE, TIMEZONE, UPDATES
 from hamrlog.tui.widgets.detail import DetailPanel
 from hamrlog.tui.widgets.entry import BrowseBar, EntryField, EntryPanel
 from hamrlog.tui.widgets.footer import StatsFooter
@@ -112,7 +112,7 @@ async def test_f9_lists_the_settings_and_saves_them(operator):
         assert app.query_one("#log-frame").border_title == "Configuración"
         table = app.query_one(ItemTable)
         assert [item.name for item in table._items.values()] == [
-            "Base de datos", "Idioma", "Zona horaria", "Separador de días",
+            "Base de datos", "Idioma", "Zona horaria", "Separador de días", "Actualizaciones",
         ]
         # Settings are only changed: the bar is up from the start.
         assert app.query_one(EntryPanel).browsing
@@ -292,3 +292,14 @@ async def test_the_power_of_a_profile_is_aligned_right(operator):
         row = table.get_row_at(0)
         column = list(table.columns).index("PWR")
         assert row[column].justify == "right"
+
+
+async def test_the_update_check_can_be_switched_off_in_f9(operator):
+    app = HamrlogApp()
+    async with app.run_test(size=(120, 30)) as pilot:
+        await pilot.pause()
+        await open_view(pilot, "f9")
+        await change_setting(pilot, app, UPDATES, "no")
+        assert appconfig.load().check_updates is False
+        await change_setting(pilot, app, UPDATES, "sí")
+        assert appconfig.load().check_updates is True

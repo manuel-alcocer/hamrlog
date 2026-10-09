@@ -157,3 +157,15 @@ def test_ci_hands_the_new_tag_to_the_release_workflow():
     assert "tag: ${{ needs.release.outputs.tag }}" in ci
     assert "workflow_call:" in release
     assert (PROJECT_ROOT / "packaging" / "release-notes.md").exists()
+
+
+def test_the_windows_installer_reopens_hamrlog_after_a_self_upgrade():
+    """hamrlog closes to let the setup replace it, passing /RELAUNCH so the
+    setup opens it again; updater.py and the script must agree on it."""
+    script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text(
+        encoding="utf-8-sig"
+    )
+    updater = (PROJECT_ROOT / "src" / "hamrlog" / "updater.py").read_text(encoding="utf-8")
+    assert "Check: WantsRelaunch" in script
+    assert "'/RELAUNCH'" in script
+    assert '"/RELAUNCH"' in updater

@@ -127,6 +127,27 @@ pip install -e ".[dev]"       # pruebas y linter
 Los ejecutables de las releases no incluyen los extras: son para usar la
 aplicación de terminal. Si quieres las métricas o la API, instala con pip.
 
+### Actualizaciones
+
+Al abrir hamrlog, antes de que aparezca la interfaz, se comprueba si hay una
+versión nueva y se pregunta en la propia terminal:
+
+```
+Hay una versión nueva, hamrlog 0.4.0 (tienes la 0.3.1). ¿Descargarla e instalarla ahora? [S/n/o = omitir esta versión]
+```
+
+- **Sí** (`Enter`): en Linux la descarga, comprueba su SHA-256, la instala y
+  abre la versión nueva. En Windows descarga el instalador, lo ejecuta con
+  solo la barra de progreso, cierra hamrlog y el instalador lo vuelve a abrir
+  al terminar.
+- **No**: abre la versión de siempre y vuelve a preguntar la próxima vez.
+- **Omitir**: no vuelve a preguntar por esa versión.
+
+Solo se instala sola si se instaló con los instaladores de la release; con
+pip, uv o el paquete de Arch, hamrlog solo avisa. Se consulta GitHub como
+mucho una vez al día y sin red no dice nada. Se desactiva en `F9` →
+*Actualizaciones*, o con la variable `HAMRLOG_NO_UPDATE_CHECK=1`.
+
 ## Uso
 
 ### Probarlo sin tocar nada: la demo

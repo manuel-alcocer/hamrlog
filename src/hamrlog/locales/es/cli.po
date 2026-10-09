@@ -143,3 +143,40 @@ msgstr "Base de datos de la demo lista: {path}"
 
 msgid "--demo only opens the interface, on its own database."
 msgstr "--demo solo abre la interfaz, con su propia base de datos."
+
+# Updates on start (updater.py).
+msgid "hamrlog {new} is available (you have {current}). Download and install it now? [Y/n/o = omit this version] "
+msgstr "Hay una versión nueva, hamrlog {new} (tienes la {current}). ¿Descargarla e instalarla ahora? [S/n/o = omitir esta versión] "
+
+msgid "hamrlog {new} is available (you have {current}): {url}"
+msgstr "Hay una versión nueva, hamrlog {new} (tienes la {current}): {url}"
+
+msgid "Upgrade it the same way you installed it."
+msgstr "Actualízalo de la misma forma en que lo instalaste."
+
+msgid "Downloading hamrlog {new}..."
+msgstr "Descargando hamrlog {new}..."
+
+msgid "The installer is running; hamrlog will open again when it finishes."
+msgstr "El instalador está en marcha; hamrlog se volverá a abrir cuando termine."
+
+msgid "The installer failed; hamrlog was not upgraded."
+msgstr "El instalador ha fallado; hamrlog no se ha actualizado."
+
+msgid "The release has no {name}."
+msgstr "La versión no incluye {name}."
+
+msgid "{name} does not match its SHA-256 sum."
+msgstr "{name} no coincide con su suma SHA-256."
+
+msgid "Could not download {name}: {error}"
+msgstr "No se pudo descargar {name}: {error}"
+
+msgid "No permission to write to {folder}. Upgrade with: curl -fsSL {url}/latest/download/hamrlog-install.sh | sudo bash -s -- --system --upgrade"
+msgstr "No hay permiso para escribir en {folder}. Actualiza con: curl -fsSL {url}/latest/download/hamrlog-install.sh | sudo bash -s -- --system --upgrade"
+
+msgid "Opening hamrlog {current}."
+msgstr "Se abre hamrlog {current}."
+
+msgid "hamrlog upgraded to {new}."
+msgstr "hamrlog actualizado a la {new}."

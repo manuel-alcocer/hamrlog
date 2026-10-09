@@ -18,7 +18,7 @@ from ..paths import database_path
 from .inventory import Item, Kind
 
 #: Row ids, in the order the list shows them.
-DATABASE, LANGUAGE, TIMEZONE, DAY_SEPARATOR = 1, 2, 3, 4
+DATABASE, LANGUAGE, TIMEZONE, DAY_SEPARATOR, UPDATES = 1, 2, 3, 4, 5
 
 #: Names of each language in the box, in either language.
 LANGUAGE_WORDS: dict[str, str] = {
@@ -38,6 +38,15 @@ NOW_NOTE = N_("takes effect at once")
 
 def _on_off(value: bool) -> str:
     return _("on") if value else _("off")
+
+
+def _switch(text: str) -> bool:
+    word = text.lower()
+    if word in YES_WORDS:
+        return True
+    if word in NO_WORDS:
+        return False
+    raise ServiceError(_("Type on or off."))
 
 
 def _language_value(code: str) -> str:
@@ -103,6 +112,16 @@ class SettingKind(Kind):
                     N_("on or off"),
                 ),
             ),
+            (
+                UPDATES,
+                N_("Updates"),
+                _on_off(config.check_updates),
+                RESTART_NOTE,
+                (
+                    N_("On start, look for a newer version and offer to install it"),
+                    N_("on or off; the HAMRLOG_NO_UPDATE_CHECK variable turns it off as well"),
+                ),
+            ),
         )
         return [
             Item(
@@ -121,6 +140,7 @@ class SettingKind(Kind):
             LANGUAGE: config.language,
             TIMEZONE: config.timezone,
             DAY_SEPARATOR: _on_off(config.day_separator),
+            UPDATES: _on_off(config.check_updates),
         }.get(item_id, "")
         return {"value": value}
 
@@ -152,14 +172,11 @@ class SettingKind(Kind):
             config.timezone = text
             name = _("Time zone")
         elif item_id == DAY_SEPARATOR:
-            word = text.lower()
-            if word in YES_WORDS:
-                config.day_separator = True
-            elif word in NO_WORDS:
-                config.day_separator = False
-            else:
-                raise ServiceError(_("Type on or off."))
+            config.day_separator = _switch(text)
             name = _("Day separator")
+        elif item_id == UPDATES:
+            config.check_updates = _switch(text)
+            name = _("Updates")
         else:
             raise ServiceError(_("Settings are changed, not added."))
         appconfig.save(config)

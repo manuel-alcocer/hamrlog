@@ -119,6 +119,25 @@ hamrlog-X.Y.Z-setup.exe /VERYSILENT /SUPPRESSMSGBOXES /CURRENTUSER /TASKS=addtop
 Se puede compilar y probar en Linux con Wine instalando Inno Setup en un
 prefijo aparte y usando cualquier `.exe` como `dist\hamrlog.exe`.
 
+### Actualización desde hamrlog
+
+`src/hamrlog/updater.py` pregunta al arrancar si hay versión nueva. Lee la
+última release de `releases/latest/download/SHA256SUMS.txt` (la versión sale
+del nombre del `setup.exe`), así que no gasta cuota de la API de GitHub, y
+comprueba cada descarga con esas sumas.
+
+- Linux: si el ejecutable vive en un prefijo con `lib/hamrlog/version` (el
+  instalador de Linux), descarga el tarball, ejecuta su `install.sh --prefix`
+  y abre el binario nuevo con los mismos argumentos.
+- Windows: si hay un `unins000.exe` junto al ejecutable, lanza el `setup.exe`
+  nuevo con `/SILENT /SUPPRESSMSGBOXES /NORESTART /RELAUNCH` y
+  `/CURRENTUSER` o `/ALLUSERS` según dónde esté instalado, y hamrlog termina.
+  `/RELAUNCH` es un parámetro propio: activa la entrada de `[Run]` que lo
+  vuelve a abrir.
+
+`HAMRLOG_RELEASES_URL` cambia el origen también aquí; las pruebas
+(`tests/test_updater.py`) usan una release falsa servida por `file://`.
+
 ### Instalador de Linux
 
 `packaging/linux/install.sh` instala el ejecutable autocontenido, sin Python.

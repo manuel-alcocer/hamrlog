@@ -34,12 +34,14 @@ class AppConfig:
         timezone: IANA zone (e.g. "Europe/Madrid") whose local time the
             status line shows next to UTC; empty shows UTC only.
         day_separator: Draw a dashed grey line between the QSOs of different days.
+        check_updates: Look for a newer release on start and offer it.
     """
 
     database: str = ""
     language: str = ""
     timezone: str = ""
     day_separator: bool = True
+    check_updates: bool = True
 
     @property
     def database_path(self) -> Path | None:

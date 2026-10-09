@@ -242,6 +242,14 @@ def _cmd_metrics(port: int) -> int:
     return serve_forever(port)
 
 
+def _offer_update(argv: list[str] | None) -> int | None:
+    from . import updater
+
+    if not updater.should_check():
+        return None
+    return updater.offer_update(list(sys.argv[1:] if argv is None else argv))
+
+
 def main(argv: list[str] | None = None) -> int:
     """Parse arguments and dispatch. Returns the process exit code."""
     _configure_console()
@@ -253,9 +261,14 @@ def main(argv: list[str] | None = None) -> int:
         # Through the environment, which wins over the settings, for this run.
         os.environ[i18n.LANG_ENV] = args.lang
         i18n.set_language(args.lang)
+    if args.demo and (command != "run" or args.database):
+        parser.error(_("--demo only opens the interface, on its own database."))
+    if command == "run":
+        # In the terminal, before the interface takes it over.
+        exit_code = _offer_update(argv)
+        if exit_code is not None:
+            return exit_code
     if args.demo:
-        if command != "run" or args.database:
-            parser.error(_("--demo only opens the interface, on its own database."))
         return _run_demo(args.lang)
     if command == "build-demo":
         return _cmd_build_demo()
