@@ -33,7 +33,7 @@ def test_pyproject_takes_the_version_from_the_package():
 
 def test_the_arch_package_matches_the_version():
     """makepkg reads its own number, so it has to be bumped with the rest."""
-    pkgbuild = (PROJECT_ROOT / "packaging" / "arch" / "PKGBUILD").read_text()
+    pkgbuild = (PROJECT_ROOT / "packaging" / "arch" / "PKGBUILD").read_text(encoding="utf-8")
     found = re.search(r"^pkgver=(.+)$", pkgbuild, re.MULTILINE)
     assert found is not None
     assert found.group(1) == hamrlog.__version__
@@ -51,7 +51,7 @@ def test_the_windows_installer_has_no_version_of_its_own():
 def test_the_windows_bundle_carries_translations_and_catalog():
     """Both are read through importlib.resources, which PyInstaller only
     serves for files it was told to bundle."""
-    spec = (PROJECT_ROOT / "packaging" / "pyinstaller" / "hamrlog.spec").read_text()
+    spec = (PROJECT_ROOT / "packaging" / "pyinstaller" / "hamrlog.spec").read_text(encoding="utf-8")
     assert '"hamrlog/locales"' in spec
     assert '"hamrlog/data/preseed"' in spec
 
@@ -85,7 +85,7 @@ def test_the_upgrade_check_and_the_release_tests_use_the_app_id():
     script = (PROJECT_ROOT / "packaging" / "windows" / "hamrlog.iss").read_text(
         encoding="utf-8-sig"
     )
-    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     app_id = re.search(r"^AppId=\{\{([0-9A-F-]+)\}$", script, re.MULTILINE)
     assert app_id is not None
     assert f"Uninstall\\{{{app_id.group(1)}}}_is1'" in script
@@ -94,8 +94,8 @@ def test_the_upgrade_check_and_the_release_tests_use_the_app_id():
 
 def test_the_release_ships_what_the_linux_installer_downloads():
     """install.sh --upgrade looks for this tarball name in SHA256SUMS.txt."""
-    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
-    installer = (PROJECT_ROOT / "packaging" / "linux" / "install.sh").read_text()
+    workflow = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
+    installer = (PROJECT_ROOT / "packaging" / "linux" / "install.sh").read_text(encoding="utf-8")
     assert 'PLATFORM="linux-x86_64"' in installer
     assert 'bundle="hamrlog-${{ needs.meta.outputs.version }}-linux-x86_64"' in workflow
     assert 'tar -czf "artifacts/$bundle.tar.gz"' in workflow
@@ -136,21 +136,23 @@ def test_the_release_dates_the_unreleased_changelog_section(tmp_path):
     subprocess.run(config["build_command"], shell=True, cwd=tmp_path, check=True,
                    env={**os.environ, "NEW_VERSION": "0.3.0"})
 
-    assert changelog.read_text() == "# Cambios\n\n## v0.3.0\n\n- Algo nuevo.\n\n## v0.2.0\n"
+    expected = "# Cambios\n\n## v0.3.0\n\n- Algo nuevo.\n\n## v0.2.0\n"
+    assert changelog.read_text(encoding="utf-8") == expected
 
 
 def test_the_changelog_keeps_the_heading_the_release_looks_for():
     """New entries go under "## Sin publicar"; right after a release the top
     section is the version just published."""
-    first = re.search(r"^## (.+)$", (PROJECT_ROOT / "CHANGELOG.md").read_text(), re.MULTILINE)
+    changelog = (PROJECT_ROOT / "CHANGELOG.md").read_text(encoding="utf-8")
+    first = re.search(r"^## (.+)$", changelog, re.MULTILINE)
     assert first is not None
     assert first.group(1) == "Sin publicar" or re.fullmatch(r"v\d+\.\d+\.\d+", first.group(1))
 
 
 def test_ci_hands_the_new_tag_to_the_release_workflow():
     """A tag pushed with GITHUB_TOKEN triggers nothing, so CI calls it."""
-    ci = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text()
-    release = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text()
+    ci = (PROJECT_ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+    release = (PROJECT_ROOT / ".github" / "workflows" / "release.yml").read_text(encoding="utf-8")
     assert "uses: ./.github/workflows/release.yml" in ci
     assert "tag: ${{ needs.release.outputs.tag }}" in ci
     assert "workflow_call:" in release
